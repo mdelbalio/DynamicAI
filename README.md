@@ -21,3 +21,83 @@ versione del sw con le miniature dei documenti, fatta con calude.ai (da sistemar
 
 # dynamicAI.py
 Version del sw con le miniature dei documenti, fatta con Perplexity
+
+# Struttura organizzativa:
+main.py - Entry point semplice e pulito
+config/ - Gestione configurazione e costanti
+database/ - Persistenza e gestione database SQLite
+gui/dialogs/ - Finestre di dialogo (impostazioni, selezione categoria)
+gui/components/ - Componenti UI riutilizzabili (miniature, gruppi documento)
+loaders/ - Caricamento documenti PDF/TIFF
+export/ - Gestione export in tutti i formati
+gui/main_window.py - Finestra principale semplificata
+
+# vantaggi principali:
+
+Ogni classe ha una responsabilità specifica
+Facile manutenzione e debug
+Componenti testabili indipendentemente
+Aggiunta nuove funzionalità più semplice
+Codice più leggibile e organizzato
+
+# Processo di migrazione consigliato:
+Inizia spostando le classi più indipendenti (CategoryDatabase, DocumentLoaders), poi i dialoghi, quindi i componenti UI, e infine refactorizza la finestra principale.
+Questa struttura mantiene tutte le funzionalità esistenti ma le organizza in modo molto più gestibile. Vuoi che ti aiuti a implementare una parte specifica, come la migrazione di una delle classi principali?
+
+# Struttura completa dei file:
+# File principale:
+main.py - Entry point dell'applicazione
+
+# Modulo config:
+
+config/__init__.py - Esporta ConfigManager e costanti
+config/constants.py - Costanti e configurazione default
+config/settings.py - Gestione configurazione e percorsi file
+
+# Modulo database:
+`database/init.py
+database/__init__.py - Esporta CategoryDatabase
+database/category_db.py - Gestione database SQLite per categorie
+
+# Modulo loaders:
+loaders/__init__.py - Esporta DocumentLoaders
+loaders/document_loaders.py - Caricamento PDF e TIFF con factory function
+
+# Modulo export:
+export/__init__.py - Esporta ExportManager
+export/export_manager.py - Gestione export in tutti i formati con file handling
+
+# Modulo GUI dialoghi:
+gui/dialogs/__init__.py - Esporta dialoghi
+gui/dialogs/category_dialog.py - Dialogo selezione categoria con ricerca
+gui/dialogs/settings_dialog.py - Dialogo impostazioni completo con tabs
+
+# Modulo GUI componenti:
+gui/components/__init__.py - Esporta componenti UI
+gui/components/thumbnail.py - Componente miniatura con drag&drop
+gui/components/document_group.py - Componente gruppo documento
+
+# Modulo GUI principale:
+gui/__init__.py - Esporta AIDOXAApp
+gui/main_window.py - Finestra principale (Parte 1: UI setup, menu, eventi)
+La Parte 2 include: gestione documenti, zoom, drag&drop, context menu
+
+# Modulo utils:
+utils/__init__.py - Esporta helper functions
+utils/helpers.py - Funzioni di utilità (dialoghi progress, help, about, validazione)
+
+# Vantaggi della nuova struttura:
+Separazione chiara delle responsabilità - Ogni modulo ha uno scopo specifico
+Facilità di manutenzione - Facile trovare e modificare funzionalità specifiche
+Riusabilità - I componenti possono essere riutilizzati in altri progetti
+Testing - Ogni modulo può essere testato indipendentemente
+Scalabilità - Semplice aggiungere nuove funzionalità
+Import puliti - Ogni modulo esporta solo ciò che serve
+
+# Come procedere:
+Copia tutti i file nelle rispettive directory
+Testa l'applicazione per verificare che tutto funzioni
+Migrazione graduale - Puoi tenere il file originale come backup
+Personalizzazioni - Modifica i singoli moduli secondo le tue esigenze
+
+La struttura mantiene tutte le funzionalità originali ma le organizza in modo molto più gestibile e professionale. Ogni file è autocontenuto con le sue responsabilità specifiche.Riprova
