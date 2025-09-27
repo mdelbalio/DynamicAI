@@ -1,0 +1,32 @@
+{
+    "window_settings": {
+        "geometry": "1400x800+100+50",
+        "state": "normal"
+    },
+    "panel_settings": {
+        "left_center_position": 400,
+        "center_right_position": 1100
+    },
+    "default_input_folder": "C:/Users/test/Downloads/aidoxa/00001",
+    "default_output_folder": "C:/Users/test/Documents/00001 elaborata",
+    "document_counter_digits": 4,
+    "document_font_name": "Arial",
+    "document_font_size": 10,
+    "document_font_bold": true,
+    "export_format": "JPEG",
+    "jpeg_quality": 95,
+    "file_handling_mode": "auto_rename",
+    "create_backup_on_overwrite": false,
+    "auto_save_changes": true,
+    "save_window_layout": true,
+    "auto_fit_images": true,
+    "show_debug_info": false,
+    "thumbnail_width": 80,
+    "thumbnail_height": 100,
+    "last_folder": "C:/Users/test/Documents/00001 elaborata",
+    "application_info": {
+        "name": "DynamicAI Editor",
+        "version": "3.3",
+        "created": "2025"
+    }
+}

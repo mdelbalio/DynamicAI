@@ -104,3 +104,6 @@ La struttura mantiene tutte le funzionalità originali ma le organizza in modo m
 
 # link swisstransfer per vedere la struttura dei files
 https://www.swisstransfer.com/d/4b315c3a-4b71-4e20-8455-0aaf7b7d7faa
+
+# 2. Crea UN SOLO eseguibile - Risultato: dist/DynamicAI.exe
+pyinstaller --onefile --windowed --name DynamicAI main.py

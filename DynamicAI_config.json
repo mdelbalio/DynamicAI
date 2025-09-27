@@ -15,7 +15,7 @@
     "document_font_bold": true,
     "export_format": "PDF_MULTI",
     "jpeg_quality": 95,
-    "file_handling_mode": "auto_rename",
+    "file_handling_mode": "ask_overwrite",
     "create_backup_on_overwrite": false,
     "auto_save_changes": true,
     "save_window_layout": true,
