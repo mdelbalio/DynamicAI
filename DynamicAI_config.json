@@ -16,7 +16,7 @@
     "export_format": "PDF_MULTI",
     "jpeg_quality": 95,
     "file_handling_mode": "auto_rename",
-    "create_backup_on_overwrite": true,
+    "create_backup_on_overwrite": false,
     "auto_save_changes": true,
     "save_window_layout": true,
     "auto_fit_images": true,

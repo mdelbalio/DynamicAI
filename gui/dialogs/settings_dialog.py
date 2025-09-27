@@ -16,7 +16,7 @@ class SettingsDialog:
         
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Impostazioni DynamicAI")
-        self.dialog.geometry("700x750")  # Aumentato l'altezza per mostrare i pulsanti
+        self.dialog.geometry("700x750")
         self.dialog.transient(parent)
         self.dialog.grab_set()
         
@@ -46,10 +46,10 @@ class SettingsDialog:
         self.create_export_tab(notebook)
         self.create_interface_tab(notebook)
         
-        # Info frame (più compatto)
+        # Info frame
         self.create_info_frame(main_frame)
         
-        # Buttons (sempre visibili in basso)
+        # Buttons
         self.create_buttons(main_frame)
         
         # Update initial preview
@@ -142,7 +142,7 @@ class SettingsDialog:
     def create_font_preview(self, parent):
         """Create font preview widget"""
         preview_frame = tk.Frame(parent)
-        preview_frame.pack(fill="x", padx=10, pady=5)
+        preview_frame.pack(fill="x", padx=10, pady=10)
         
         tk.Label(preview_frame, text="Anteprima:", font=("Arial", 9)).pack(anchor="w")
         self.font_preview = tk.Label(preview_frame, text="0001 Categoria Documento", 
@@ -161,7 +161,7 @@ class SettingsDialog:
         save_frame = ttk.Frame(notebook)
         notebook.add(save_frame, text="Export")
         
-        # Export format settings (più compatto)
+        # Export format settings
         export_format_frame = tk.LabelFrame(save_frame, text="Formato Export", 
                                           font=("Arial", 10, "bold"))
         export_format_frame.pack(fill="x", padx=10, pady=5)
@@ -179,7 +179,7 @@ class SettingsDialog:
             tk.Radiobutton(export_format_frame, text=text, variable=self.export_format_var, 
                           value=value, font=("Arial", 8)).pack(anchor="w", padx=10, pady=1)
         
-        # Quality settings (più compatto)
+        # Quality settings for JPEG
         quality_frame = tk.LabelFrame(save_frame, text="Qualità JPEG", 
                                      font=("Arial", 10, "bold"))
         quality_frame.pack(fill="x", padx=10, pady=5)
@@ -191,6 +191,53 @@ class SettingsDialog:
         self.jpeg_quality_var = tk.IntVar(value=self.config_data.get('jpeg_quality', 95))
         tk.Spinbox(quality_control_frame, from_=1, to=100, width=5, 
                   textvariable=self.jpeg_quality_var).pack(side="left", padx=(5, 0))
+        
+        # GESTIONE FILE ESISTENTI - SEZIONE COMPLETA RIPRISTINATA
+        save_options_frame = tk.LabelFrame(save_frame, text="Gestione File Esistenti", 
+                                          font=("Arial", 10, "bold"))
+        save_options_frame.pack(fill="x", padx=10, pady=5)
+        
+        # Radio buttons per modalità gestione file
+        self.file_handling_var = tk.StringVar(value=self.config_data.get('file_handling_mode', 'auto_rename'))
+        
+        tk.Label(save_options_frame, text="Quando un file esiste già:", 
+                font=("Arial", 9, "bold")).pack(anchor="w", padx=10, pady=(5, 3))
+        
+        tk.Radiobutton(save_options_frame, text="Rinomina automaticamente (es: file(1).pdf, file(2).pdf)", 
+                      variable=self.file_handling_var, value="auto_rename", 
+                      font=("Arial", 8)).pack(anchor="w", padx=20, pady=1)
+        
+        tk.Radiobutton(save_options_frame, text="Chiedi conferma prima di sovrascrivere", 
+                      variable=self.file_handling_var, value="ask_overwrite", 
+                      font=("Arial", 8)).pack(anchor="w", padx=20, pady=1)
+        
+        tk.Radiobutton(save_options_frame, text="Sovrascrivi sempre senza chiedere", 
+                      variable=self.file_handling_var, value="always_overwrite", 
+                      font=("Arial", 8)).pack(anchor="w", padx=20, pady=1)
+        
+        # Frame per opzioni backup
+        backup_frame = tk.Frame(save_options_frame)
+        backup_frame.pack(fill="x", padx=10, pady=(5, 3))
+        
+        self.create_backup_var = tk.BooleanVar(value=self.config_data.get('create_backup_on_overwrite', False))
+        self.backup_checkbox = tk.Checkbutton(backup_frame, text="Crea backup (.backup) quando sovrascrivi", 
+                                            variable=self.create_backup_var, font=("Arial", 8))
+        self.backup_checkbox.pack(anchor="w")
+        
+        # Abilita/disabilita backup checkbox in base alla selezione
+        def on_file_handling_change():
+            if self.file_handling_var.get() in ["ask_overwrite", "always_overwrite"]:
+                self.backup_checkbox.config(state="normal")
+            else:
+                self.backup_checkbox.config(state="disabled")
+        
+        self.file_handling_var.trace('w', lambda *args: on_file_handling_change())
+        on_file_handling_change()  # Chiamata iniziale
+        
+        # Auto save checkbox
+        self.auto_save_var = tk.BooleanVar(value=self.config_data.get('auto_save_changes', True))
+        tk.Checkbutton(save_options_frame, text="Salva automaticamente le modifiche alla configurazione", 
+                      variable=self.auto_save_var, font=("Arial", 8)).pack(anchor="w", padx=10, pady=3)
 
     def create_interface_tab(self, notebook):
         """Create interface configuration tab"""
@@ -233,23 +280,27 @@ class SettingsDialog:
                   textvariable=self.thumb_height_var).pack(side="left", padx=(5, 0))
 
     def create_info_frame(self, parent):
-        """Create info frame with file paths (più compatto)"""
+        """Create info frame with file paths"""
         from config.settings import CONFIG_FILE, DB_FILE
         
         info_frame = tk.Frame(parent)
         info_frame.pack(fill="x", pady=(5, 0))
         
         info_text = tk.Label(info_frame, 
-                            text=f"Config: {CONFIG_FILE.split('/')[-1]}", 
+                            text=f"File configurazione: {CONFIG_FILE.split('/')[-1]}", 
                             font=("Arial", 7), fg="gray")
         info_text.pack()
+        
+        db_info_text = tk.Label(info_frame, 
+                               text=f"Database categorie: {DB_FILE.split('/')[-1]}", 
+                               font=("Arial", 7), fg="gray")
+        db_info_text.pack()
 
     def create_buttons(self, parent):
-        """Create dialog buttons - SEMPRE VISIBILI"""
+        """Create dialog buttons - sempre visibili in basso"""
         button_frame = tk.Frame(parent, bg="lightgray", relief="raised", bd=1)
         button_frame.pack(fill="x", side="bottom", pady=(10, 0))
         
-        # Pulsanti con spaziatura fissa
         tk.Button(button_frame, text="Ripristina Default", command=self.reset_defaults, 
                  bg="orange", font=("Arial", 9), width=15).pack(side="left", padx=10, pady=5)
         
@@ -294,19 +345,24 @@ class SettingsDialog:
     def reset_defaults(self):
         """Reset all settings to defaults"""
         if messagebox.askyesno("Conferma", "Ripristinare tutte le impostazioni predefinite?"):
+            from config.constants import DEFAULT_CONFIG
+            
             self.input_folder_var.set("")
             self.output_folder_var.set("")
-            self.counter_digits_var.set(4)
-            self.font_name_var.set("Arial")
-            self.font_size_var.set(10)
-            self.font_bold_var.set(True)
-            self.export_format_var.set("JPEG")
-            self.jpeg_quality_var.set(95)
-            self.save_layout_var.set(True)
-            self.auto_fit_var.set(True)
-            self.show_debug_var.set(False)
-            self.thumb_width_var.set(80)
-            self.thumb_height_var.set(100)
+            self.counter_digits_var.set(DEFAULT_CONFIG['document_counter_digits'])
+            self.font_name_var.set(DEFAULT_CONFIG['document_font_name'])
+            self.font_size_var.set(DEFAULT_CONFIG['document_font_size'])
+            self.font_bold_var.set(DEFAULT_CONFIG['document_font_bold'])
+            self.export_format_var.set(DEFAULT_CONFIG['export_format'])
+            self.jpeg_quality_var.set(DEFAULT_CONFIG['jpeg_quality'])
+            self.file_handling_var.set(DEFAULT_CONFIG['file_handling_mode'])
+            self.create_backup_var.set(DEFAULT_CONFIG['create_backup_on_overwrite'])
+            self.auto_save_var.set(DEFAULT_CONFIG['auto_save_changes'])
+            self.save_layout_var.set(DEFAULT_CONFIG['save_window_layout'])
+            self.auto_fit_var.set(DEFAULT_CONFIG['auto_fit_images'])
+            self.show_debug_var.set(DEFAULT_CONFIG['show_debug_info'])
+            self.thumb_width_var.set(DEFAULT_CONFIG['thumbnail_width'])
+            self.thumb_height_var.set(DEFAULT_CONFIG['thumbnail_height'])
 
     def ok_clicked(self):
         """Handle OK button click"""
@@ -319,6 +375,9 @@ class SettingsDialog:
             'document_font_bold': self.font_bold_var.get(),
             'export_format': self.export_format_var.get(),
             'jpeg_quality': self.jpeg_quality_var.get(),
+            'file_handling_mode': self.file_handling_var.get(),  # AGGIUNTO
+            'create_backup_on_overwrite': self.create_backup_var.get(),  # AGGIUNTO
+            'auto_save_changes': self.auto_save_var.get(),  # AGGIUNTO
             'save_window_layout': self.save_layout_var.get(),
             'auto_fit_images': self.auto_fit_var.get(),
             'show_debug_info': self.show_debug_var.get(),

@@ -101,3 +101,6 @@ Migrazione graduale - Puoi tenere il file originale come backup
 Personalizzazioni - Modifica i singoli moduli secondo le tue esigenze
 
 La struttura mantiene tutte le funzionalità originali ma le organizza in modo molto più gestibile e professionale. Ogni file è autocontenuto con le sue responsabilità specifiche.Riprova
+
+# link swisstransfer per vedere la struttura dei files
+https://www.swisstransfer.com/d/4b315c3a-4b71-4e20-8455-0aaf7b7d7faa

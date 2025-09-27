@@ -7,6 +7,8 @@ import time
 import shutil
 from PIL import Image
 from typing import List, Callable, Optional
+import tkinter as tk
+from tkinter import messagebox
 
 class ExportManager:
     """Manages export operations for all supported formats"""
@@ -54,8 +56,11 @@ class ExportManager:
                 filename = f"{current_document_name}_{page_counter:03d}.jpg"
                 original_filepath = os.path.join(output_folder, filename)
                 
-                # Handle existing files
+                # Handle existing files with new system
                 final_filepath = self.check_overwrite(original_filepath, filename)
+                if final_filepath is None:  # User cancelled
+                    continue
+                    
                 final_filename = os.path.basename(final_filepath)
                 
                 if progress_callback:
@@ -84,6 +89,9 @@ class ExportManager:
                 original_filepath = os.path.join(output_folder, filename)
                 
                 final_filepath = self.check_overwrite(original_filepath, filename)
+                if final_filepath is None:  # User cancelled
+                    continue
+                    
                 final_filename = os.path.basename(final_filepath)
                 
                 if progress_callback:
@@ -115,6 +123,9 @@ class ExportManager:
             original_filepath = os.path.join(output_folder, filename)
             
             final_filepath = self.check_overwrite(original_filepath, filename)
+            if final_filepath is None:  # User cancelled
+                continue
+                
             final_filename = os.path.basename(final_filepath)
             
             if progress_callback:
@@ -147,6 +158,9 @@ class ExportManager:
                 original_filepath = os.path.join(output_folder, filename)
                 
                 final_filepath = self.check_overwrite(original_filepath, filename)
+                if final_filepath is None:  # User cancelled
+                    continue
+                    
                 final_filename = os.path.basename(final_filepath)
                 
                 if progress_callback:
@@ -178,6 +192,9 @@ class ExportManager:
             original_filepath = os.path.join(output_folder, filename)
             
             final_filepath = self.check_overwrite(original_filepath, filename)
+            if final_filepath is None:  # User cancelled
+                continue
+                
             final_filename = os.path.basename(final_filepath)
             
             if progress_callback:
@@ -197,26 +214,49 @@ class ExportManager:
         
         return exported_files
     
-    def check_overwrite(self, filepath: str, filename: str) -> str:
-        """Check if file should be overwritten or renamed"""
+    def check_overwrite(self, filepath: str, filename: str) -> Optional[str]:
+        """Check if file should be overwritten or renamed - Sistema completo di gestione file esistenti"""
         file_handling_mode = self.config_data.get('file_handling_mode', 'auto_rename')
         
         if not os.path.exists(filepath):
             return filepath
         
         if file_handling_mode == 'auto_rename':
+            # Rinomina automaticamente stile Windows (1), (2), (3)...
             return self.get_unique_filepath(filepath)
+            
         elif file_handling_mode == 'ask_overwrite':
-            # This would need to be handled by the GUI layer
-            # For now, default to backup and overwrite
-            if self.config_data.get('create_backup_on_overwrite', False):
-                self.create_file_backup(filepath)
-            return filepath
+            # Chiedi conferma all'utente con popup a 3 opzioni
+            try:
+                result = messagebox.askyesnocancel(
+                    "File Esistente", 
+                    f"Il file '{filename}' esiste già.\n\n" +
+                    "• Sì = Sovrascrivi il file esistente\n" +
+                    "• No = Rinomina automaticamente\n" +
+                    "• Annulla = Salta questo file"
+                )
+                
+                if result is True:  # Yes - Sovrascrivi
+                    if self.config_data.get('create_backup_on_overwrite', False):
+                        self.create_file_backup(filepath)
+                    return filepath
+                elif result is False:  # No - Rinomina
+                    return self.get_unique_filepath(filepath)
+                else:  # Cancel - Salta
+                    return None
+                    
+            except Exception as e:
+                print(f"Error in dialog: {e}")
+                # Fallback: rinomina automaticamente
+                return self.get_unique_filepath(filepath)
+                
         elif file_handling_mode == 'always_overwrite':
+            # Sovrascrivi sempre senza chiedere
             if self.config_data.get('create_backup_on_overwrite', False):
                 self.create_file_backup(filepath)
             return filepath
         
+        # Default fallback
         return filepath
     
     def get_unique_filepath(self, filepath: str) -> str:
@@ -251,7 +291,7 @@ class ExportManager:
         """Create backup of existing file"""
         backup_path = filepath + '.backup'
         try:
-            # Se esiste già un backup, rinominalo
+            # Se esiste già un backup, usa numerazione progressiva
             if os.path.exists(backup_path):
                 backup_path = self.get_unique_filepath(backup_path)
             
@@ -261,15 +301,57 @@ class ExportManager:
             print(f"Error creating backup: {e}")
     
     def prepare_image_for_save(self, image: Image.Image) -> Image.Image:
-        """Prepare image for saving (convert to RGB if needed)"""
+        """Prepare image for saving (convert to RGB if needed for JPEG/PDF)"""
         if image.mode in ('RGBA', 'LA', 'P'):
+            # Create white background for transparency
             rgb_img = Image.new('RGB', image.size, (255, 255, 255))
             if image.mode == 'P':
                 image = image.convert('RGBA')
+            # Paste with alpha mask if available
             rgb_img.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
             return rgb_img
         return image
     
     def sanitize_filename(self, filename: str) -> str:
         """Remove invalid characters from filename"""
-        return "".join(c for c in filename if c.isalnum() or c in (' ', '-', '_', '.')).rstrip()
+        # Remove or replace invalid filename characters
+        invalid_chars = '<>:"/\\|?*'
+        sanitized = filename
+        for char in invalid_chars:
+            sanitized = sanitized.replace(char, '_')
+        
+        # Remove leading/trailing spaces and dots
+        sanitized = sanitized.strip(' .')
+        
+        # Limit length to avoid filesystem issues
+        if len(sanitized) > 100:
+            sanitized = sanitized[:100]
+            
+        # Ensure we don't have an empty filename
+        if not sanitized:
+            sanitized = "documento"
+            
+        return sanitized
+    
+    def get_export_summary(self, exported_files: List[str], export_format: str) -> str:
+        """Generate a summary message for the export operation"""
+        summary = f"Export completato!\n\n"
+        summary += f"Formato: {export_format}\n"
+        summary += f"File creati: {len(exported_files)}\n\n"
+        
+        if export_format in ['PDF_MULTI', 'TIFF_MULTI']:
+            summary += "Nota: Ogni documento è stato salvato come file multi-pagina\n"
+        else:
+            summary += "Nota: Ogni pagina è stata salvata come file separato\n"
+            
+        if len(exported_files) > 10:
+            summary += f"\nPrimi file creati:\n"
+            for i, filename in enumerate(exported_files[:10]):
+                summary += f"• {filename}\n"
+            summary += f"... e altri {len(exported_files) - 10} file"
+        else:
+            summary += f"\nFile creati:\n"
+            for filename in exported_files:
+                summary += f"• {filename}\n"
+        
+        return summary
