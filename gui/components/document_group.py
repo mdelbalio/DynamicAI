@@ -1,26 +1,32 @@
 """
-Document group component for DynamicAI
+Document group component for DynamicAI with multi-row grid layout
 """
 
 import tkinter as tk
 from PIL import Image
 from typing import TYPE_CHECKING, List, Optional
+import math
 from .thumbnail import PageThumbnail
 
 if TYPE_CHECKING:
     from gui.main_window import AIDOXAApp
 
 class DocumentGroup:
-    """Represents a group of pages belonging to the same document category"""
+    """Represents a group of pages belonging to the same document category with multi-row layout"""
     
     def __init__(self, parent: tk.Widget, categoryname: str, mainapp: 'AIDOXAApp', document_counter: int):
-        self.parent = parent  # <-- QUESTO ERA MANCANTE
+        self.parent = parent
         self.mainapp = mainapp
         self.categoryname = categoryname
         self.document_counter = document_counter
         self.isselected = False
         self.thumbnails: List[PageThumbnail] = []
         self.pages: List[int] = []
+        
+        # Grid layout settings
+        self.thumbnails_per_row = 4  # Default thumbnails per row
+        self.min_thumbnails_per_row = 2
+        self.max_thumbnails_per_row = 6
         
         # Create UI elements
         self.create_widgets()
@@ -34,9 +40,12 @@ class DocumentGroup:
         # Create header with document counter and category name
         self.create_header()
         
-        # Container for thumbnails without wrapping (original layout)
+        # Container for thumbnails with grid layout
         self.pages_frame = tk.Frame(self.frame, bg="white")
-        self.pages_frame.pack(fill="x", padx=5, pady=5)
+        self.pages_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Configure grid weights for responsive layout
+        self.pages_frame.grid_columnconfigure((0, 1, 2, 3, 4, 5), weight=1)
 
     def create_header(self):
         """Create the document group header with counter and category"""
@@ -67,6 +76,33 @@ class DocumentGroup:
         # Bind hover events for highlighting
         self.label.bind("<Enter>", self.on_header_enter)
         self.label.bind("<Leave>", self.on_header_leave)
+        # Bind to frame resize for dynamic grid adjustment
+        self.pages_frame.bind("<Configure>", self.on_frame_configure)
+
+    def on_frame_configure(self, event):
+        """Handle frame resize to adjust grid layout dynamically"""
+        if event.widget == self.pages_frame and len(self.thumbnails) > 0:
+            # Calculate optimal thumbnails per row based on frame width
+            frame_width = event.width
+            if frame_width > 1:
+                # Get thumbnail width from config
+                thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+                padding_per_thumbnail = 6  # 3px padding on each side
+                total_thumb_width = thumb_width + padding_per_thumbnail
+                
+                # Calculate how many thumbnails can fit
+                optimal_per_row = max(self.min_thumbnails_per_row, 
+                                    min(self.max_thumbnails_per_row, 
+                                        frame_width // total_thumb_width))
+                
+                # Only repack if the number changed significantly
+                if abs(optimal_per_row - self.thumbnails_per_row) > 0:
+                    self.thumbnails_per_row = optimal_per_row
+                    self.after_idle_repack()
+
+    def after_idle_repack(self):
+        """Repack thumbnails after idle to avoid recursive calls"""
+        self.mainapp.after_idle(self.repack_thumbnails_grid)
 
     def on_header_enter(self, event):
         """Handle mouse enter on header"""
@@ -104,7 +140,6 @@ class DocumentGroup:
         
         if position is None:
             # Add at end
-            thumbnail.pack(side="left", padx=3, pady=3)
             self.thumbnails.append(thumbnail)
             if pagenum not in self.pages:
                 self.pages.append(pagenum)
@@ -113,7 +148,9 @@ class DocumentGroup:
             self.thumbnails.insert(position, thumbnail)
             if pagenum not in self.pages:
                 self.pages.insert(position, pagenum)
-            self.repack_thumbnails()
+        
+        # Repack all thumbnails in grid layout
+        self.repack_thumbnails_grid()
         
         return thumbnail
 
@@ -122,36 +159,112 @@ class DocumentGroup:
         if thumbnail in self.thumbnails:
             index = self.thumbnails.index(thumbnail)
             self.thumbnails.remove(thumbnail)
-            thumbnail.pack_forget()
+            thumbnail.grid_forget()  # Changed from pack_forget to grid_forget
             if thumbnail.pagenum in self.pages:
                 self.pages.remove(thumbnail.pagenum)
+            # Repack remaining thumbnails
+            self.repack_thumbnails_grid()
             return index
         return -1
 
+    def repack_thumbnails_grid(self):
+        """Repack all thumbnails in grid layout"""
+        # Clear all current grid positions
+        for thumb in self.thumbnails:
+            thumb.grid_forget()
+        
+        # Calculate grid dimensions
+        total_thumbnails = len(self.thumbnails)
+        if total_thumbnails == 0:
+            return
+        
+        # Adjust thumbnails per row based on count and frame width
+        current_frame_width = self.pages_frame.winfo_width()
+        if current_frame_width > 1:
+            thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+            padding_per_thumbnail = 6
+            total_thumb_width = thumb_width + padding_per_thumbnail
+            optimal_per_row = max(self.min_thumbnails_per_row, 
+                                min(self.max_thumbnails_per_row, 
+                                    current_frame_width // total_thumb_width))
+            self.thumbnails_per_row = optimal_per_row
+        
+        # Grid layout
+        for i, thumb in enumerate(self.thumbnails):
+            row = i // self.thumbnails_per_row
+            col = i % self.thumbnails_per_row
+            thumb.grid(row=row, column=col, padx=3, pady=3, sticky="n")
+        
+        # Auto-resize the frame height based on number of rows
+        num_rows = math.ceil(total_thumbnails / self.thumbnails_per_row)
+        thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
+        label_height = 20  # Approximate height of page label
+        total_thumb_height = thumb_height + label_height + 6  # 6px padding
+        min_frame_height = num_rows * total_thumb_height + 10  # 10px extra padding
+        
+        # Update frame minimum height
+        self.pages_frame.configure(height=min_frame_height)
+
     def repack_thumbnails(self):
-        """Repack all thumbnails in the correct order"""
-        for thumb in self.thumbnails:
-            thumb.pack_forget()
-        for thumb in self.thumbnails:
-            thumb.pack(side="left", padx=3, pady=3)
+        """Legacy method - redirects to grid layout"""
+        self.repack_thumbnails_grid()
 
     def get_drop_position(self, x_root: int) -> int:
-        """Determine where to insert based on x coordinate"""
+        """Determine where to insert based on x coordinate - adapted for grid"""
         if not self.thumbnails:
             return 0
             
         frame_x = self.pages_frame.winfo_rootx()
+        frame_y = self.pages_frame.winfo_rooty()
         relative_x = x_root - frame_x
+        
+        # Find the closest thumbnail position in grid
+        closest_distance = float('inf')
+        closest_position = len(self.thumbnails)
         
         for i, thumb in enumerate(self.thumbnails):
             try:
-                thumb_x = thumb.frame.winfo_x() + thumb.frame.winfo_width() // 2
-                if relative_x < thumb_x:
-                    return i
+                # Get thumbnail center position
+                thumb_info = thumb.grid_info()
+                if thumb_info:
+                    row = thumb_info.get('row', 0)
+                    col = thumb_info.get('column', 0)
+                    
+                    # Estimate position based on grid
+                    thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+                    thumb_x = col * (thumb_width + 6) + (thumb_width // 2)
+                    
+                    distance = abs(relative_x - thumb_x)
+                    if distance < closest_distance:
+                        closest_distance = distance
+                        closest_position = i
+                        
+                        # If we're to the left of center, insert before
+                        if relative_x < thumb_x:
+                            closest_position = i
+                        else:
+                            closest_position = i + 1
+                            
             except tk.TclError:
                 continue
         
-        return len(self.thumbnails)
+        return min(closest_position, len(self.thumbnails))
+
+    def calculate_optimal_thumbnails_per_row(self) -> int:
+        """Calculate optimal number of thumbnails per row based on current frame width"""
+        frame_width = self.pages_frame.winfo_width()
+        if frame_width <= 1:
+            return self.thumbnails_per_row  # Return current if width not available
+        
+        thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+        padding_per_thumbnail = 6  # 3px padding on each side
+        total_thumb_width = thumb_width + padding_per_thumbnail
+        
+        optimal_per_row = max(self.min_thumbnails_per_row, 
+                            min(self.max_thumbnails_per_row, 
+                                frame_width // total_thumb_width))
+        
+        return optimal_per_row
 
     def update_category_name(self, new_name: str):
         """Update the category name display"""
@@ -209,12 +322,16 @@ class DocumentGroup:
                            anchor="w", justify="left")
 
     def refresh_thumbnail_sizes(self):
-        """Refresh all thumbnail sizes from config"""
+        """Refresh all thumbnail sizes from config and repack grid"""
         thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
         thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
         
         for thumbnail in self.thumbnails:
             thumbnail.update_thumbnail_size(thumb_width, thumb_height)
+        
+        # Recalculate grid layout with new sizes
+        self.thumbnails_per_row = self.calculate_optimal_thumbnails_per_row()
+        self.repack_thumbnails_grid()
 
     def is_empty(self) -> bool:
         """Check if document group has no thumbnails"""
@@ -246,5 +363,7 @@ class DocumentGroup:
             'page_count': len(self.thumbnails),
             'pages': self.pages.copy(),
             'selected': self.isselected,
-            'empty': self.is_empty()
+            'empty': self.is_empty(),
+            'thumbnails_per_row': self.thumbnails_per_row,
+            'grid_rows': math.ceil(len(self.thumbnails) / self.thumbnails_per_row) if self.thumbnails else 0
         }

@@ -1,5 +1,5 @@
 """
-Page thumbnail component for DynamicAI
+Page thumbnail component for DynamicAI with grid layout support
 """
 
 import tkinter as tk
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from gui.components.document_group import DocumentGroup
 
 class PageThumbnail:
-    """Represents a page thumbnail with drag and drop capabilities"""
+    """Represents a page thumbnail with drag and drop capabilities and grid layout support"""
     
     def __init__(self, parent: tk.Widget, pagenum: int, image: Image.Image, 
                  categoryname: str, mainapp: 'AIDOXAApp', document_group: 'DocumentGroup'):
@@ -32,6 +32,9 @@ class PageThumbnail:
         thumb_width = mainapp.config_manager.get('thumbnail_width', 80)
         thumb_height = mainapp.config_manager.get('thumbnail_height', 100)
         self.thumbnail_imgtk = self.create_thumbnail(image, (thumb_width, thumb_height))
+        
+        # Store current thumbnail size for updates
+        self.current_thumb_size = (thumb_width, thumb_height)
         
         # Create UI elements
         self.create_widgets()
@@ -158,26 +161,57 @@ class PageThumbnail:
 
     def update_thumbnail_size(self, width: int, height: int):
         """Update thumbnail size with new dimensions"""
-        self.thumbnail_imgtk = self.create_thumbnail(self.image, (width, height))
-        self.img_label.configure(image=self.thumbnail_imgtk)
+        if (width, height) != self.current_thumb_size:
+            self.current_thumb_size = (width, height)
+            self.thumbnail_imgtk = self.create_thumbnail(self.image, (width, height))
+            self.img_label.configure(image=self.thumbnail_imgtk)
 
+    # Grid layout methods
+    def grid(self, **kwargs):
+        """Place the thumbnail using grid geometry manager"""
+        self.frame.grid(**kwargs)
+
+    def grid_forget(self):
+        """Remove the thumbnail from grid display"""
+        self.frame.grid_forget()
+
+    def grid_info(self):
+        """Get grid information for this thumbnail"""
+        return self.frame.grid_info()
+
+    # Legacy pack methods for backward compatibility
     def pack(self, **kwargs):
-        """Pack the thumbnail frame"""
+        """Place the thumbnail using pack geometry manager (legacy)"""
         self.frame.pack(**kwargs)
 
     def pack_forget(self):
-        """Remove the thumbnail from display"""
+        """Remove the thumbnail from pack display (legacy)"""
         self.frame.pack_forget()
 
     def destroy(self):
         """Destroy the thumbnail widget"""
-        self.frame.destroy()
+        try:
+            self.frame.destroy()
+        except tk.TclError:
+            # Widget already destroyed
+            pass
 
     def get_info(self) -> dict:
         """Get thumbnail information"""
+        grid_info = {}
+        try:
+            grid_info = self.grid_info()
+        except tk.TclError:
+            grid_info = {}
+            
         return {
             'pagenum': self.pagenum,
             'category': self.categoryname,
             'selected': self.isselected,
-            'image_size': self.image.size if self.image else None
+            'image_size': self.image.size if self.image else None,
+            'thumbnail_size': self.current_thumb_size,
+            'grid_position': {
+                'row': grid_info.get('row', -1),
+                'column': grid_info.get('column', -1)
+            }
         }

@@ -1,5 +1,5 @@
 """
-Main window for DynamicAI application
+Main window for DynamicAI application with multi-row grid support
 """
 
 import os
@@ -21,7 +21,7 @@ from utils import create_progress_dialog, show_help_dialog, show_about_dialog
 from config.constants import RESAMPLEFILTER
 
 class AIDOXAApp(tk.Tk):
-    """Main application window for DynamicAI"""
+    """Main application window for DynamicAI with multi-row grid support"""
     
     def __init__(self):
         super().__init__()
@@ -304,7 +304,7 @@ class AIDOXAApp(tk.Tk):
         self.instructions_text.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Default instructions
-        self.update_instructions("Configura le cartelle input/output nelle Preferenze e usa 'Aggiorna Lista (Preview)' per iniziare.\n\nUsa il menu 'Aiuto > Istruzioni' per vedere le funzionalità complete.")
+        self.update_instructions("Configura le cartelle input/output nelle Preferenze e usa 'Aggiorna Lista (Preview)' per iniziare.\n\nUsa il menu 'Aiuto > Istruzioni' per vedere le funzionalità complete.\n\nNuova funzionalità: Layout a griglia multi-riga per i documenti con molte pagine!")
 
     def bind_events(self):
         """Bind keyboard shortcuts and window events"""
@@ -497,6 +497,8 @@ class AIDOXAApp(tk.Tk):
         
         for group in self.documentgroups:
             group.refresh_thumbnail_sizes()
+            # Force grid repack after size changes
+            self.after_idle(lambda g=group: g.repack_thumbnails_grid())
 
     def refresh_document_headers(self):
         """Refresh all document headers with new font settings"""
@@ -601,7 +603,7 @@ class AIDOXAApp(tk.Tk):
             self.documentloader = None
 
     def build_document_groups(self, categories: List[dict]):
-        """Build document groups from category data"""
+        """Build document groups from category data with improved grid layout"""
         if self.updating_ui:
             return
         self.updating_ui = True
@@ -655,11 +657,19 @@ class AIDOXAApp(tk.Tk):
             self.documentgroups.append(group)
             document_counter += 1
 
+        # Force update of scroll region after all groups are added
+        self.after_idle(self.update_scroll_region)
+        
         self.updating_ui = False
-        self.debug_print(f"Created {len(documents)} document groups")
+        self.debug_print(f"Created {len(documents)} document groups with grid layout")
+
+    def update_scroll_region(self):
+        """Update scroll region for document groups"""
+        self.canvas.update_idletasks()
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def update_document_instructions(self, json_file: str, doc_file: str, input_folder: str, categories: List):
-        """Update instructions panel with document information"""
+        """Update instructions panel with document information including grid layout info"""
         export_format = self.config_manager.get('export_format', 'JPEG')
         format_display = {
             'JPEG': 'JPEG',
@@ -678,6 +688,16 @@ class AIDOXAApp(tk.Tk):
         
         db_categories_count = len(self.category_db.get_all_categories())
         
+        # Count total pages per document for grid info
+        grid_info = ""
+        for i, group in enumerate(self.documentgroups):
+            page_count = group.get_page_count()
+            group_info = group.get_info()
+            grid_rows = group_info.get('grid_rows', 0)
+            per_row = group_info.get('thumbnails_per_row', 4)
+            if page_count > 0:
+                grid_info += f"  Doc {i+1}: {page_count} pagine ({grid_rows} righe, {per_row}/riga)\n"
+        
         instructions = f"""DOCUMENTO CARICATO:
 
 File JSON: {os.path.basename(json_file)}
@@ -688,10 +708,19 @@ Categorie Database: {db_categories_count}
 Documenti: {len(self.documentgroups)}
 Pagine totali: {self.documentloader.totalpages if self.documentloader else 0}
 
+LAYOUT A GRIGLIA MULTI-RIGA:
+✓ Adattamento automatico alla larghezza finestra
+✓ 2-6 miniature per riga (configurabile)
+✓ Altezza documento si adatta alle righe necessarie
+✓ Drag & drop compatibile con layout a griglia
+
+{grid_info}
+
 CONFIGURAZIONE DOCUMENTI:
 Cifre contatore: {self.config_manager.get('document_counter_digits', 4)}
 Font: {self.config_manager.get('document_font_name', 'Arial')} {self.config_manager.get('document_font_size', 10)}pt
 Allineamento: Sinistra
+Layout: Griglia multi-riga adattiva
 
 EXPORT CONFIGURATO:
 Formato: {format_display}
@@ -713,13 +742,14 @@ GESTIONE FILE ESISTENTI (v3.3):
 
 OPERAZIONI DISPONIBILI:
 • Click su miniature: visualizza immagine
-• Drag miniature: riorganizza tra documenti
+• Drag miniature: riorganizza tra documenti (grid-compatible)
 • Click intestazioni: seleziona intero documento
 • Tasto destro su intestazioni: menu con categorie
 • Combobox categoria: modifica e salva nuove
 • Click su immagine centrale: zoom fit
 • Hover su elementi per feedback visivo
 • Export intelligente con gestione duplicati
+• Ridimensionamento finestra: layout griglia si adatta
 
 EXPORT:
 Nome base file: {self.current_document_name}
@@ -1011,7 +1041,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             except Exception as e:
                 self.debug_print(f"Error updating image display: {e}")
 
-    # Drag and drop functionality
+    # Drag and drop functionality - Enhanced for grid layout
     def create_drag_preview(self, thumbnail: PageThumbnail):
         """Create drag preview window"""
         self.drag_item = thumbnail
@@ -1028,7 +1058,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             self.drag_preview.geometry(f"+{x}+{y}")
 
     def stop_drag(self, x_root: int, y_root: int):
-        """Stop drag operation"""
+        """Stop drag operation - Enhanced for grid layout"""
         if not self.dragging:
             return
         
@@ -1050,7 +1080,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             
             if original_group == target_group:
                 # Reorder within same group
-                self.reorder_within_group(self.drag_item, target_group, x_root)
+                self.reorder_within_group(self.drag_item, target_group, x_root, y_root)
             else:
                 # Move to different group
                 self.move_page_to_group(self.drag_item, target_group)
@@ -1071,10 +1101,12 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                 continue
         return None
 
-    def reorder_within_group(self, thumbnail: PageThumbnail, group: DocumentGroup, x_root: int):
-        """Reorder thumbnail within the same group"""
+    def reorder_within_group(self, thumbnail: PageThumbnail, group: DocumentGroup, x_root: int, y_root: int):
+        """Reorder thumbnail within the same group - Enhanced for grid layout"""
         old_index = group.thumbnails.index(thumbnail)
-        new_index = group.get_drop_position(x_root)
+        
+        # Use enhanced drop position calculation for grid
+        new_index = self.calculate_grid_drop_position(group, x_root, y_root)
         
         # Adjust new index if we're moving to the right
         if new_index > old_index:
@@ -1091,10 +1123,34 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         group.thumbnails.insert(new_index, thumbnail)
         group.pages.insert(new_index, thumbnail.pagenum)
         
-        # Repack all thumbnails
-        group.repack_thumbnails()
+        # Repack all thumbnails in grid
+        group.repack_thumbnails_grid()
         
         self.debug_print(f"Reordered page {thumbnail.pagenum} in {group.categoryname} from {old_index} to {new_index}")
+
+    def calculate_grid_drop_position(self, group: DocumentGroup, x_root: int, y_root: int) -> int:
+        """Calculate drop position in grid layout based on mouse coordinates"""
+        if not group.thumbnails:
+            return 0
+        
+        frame_x = group.pages_frame.winfo_rootx()
+        frame_y = group.pages_frame.winfo_rooty()
+        relative_x = x_root - frame_x
+        relative_y = y_root - frame_y
+        
+        thumb_width = self.config_manager.get('thumbnail_width', 80)
+        thumb_height = self.config_manager.get('thumbnail_height', 100)
+        padding = 6
+        
+        # Calculate grid position
+        col = max(0, relative_x // (thumb_width + padding))
+        row = max(0, relative_y // (thumb_height + 20 + padding))  # 20 for label height
+        
+        # Convert grid position to list index
+        thumbnails_per_row = group.thumbnails_per_row
+        estimated_position = row * thumbnails_per_row + col
+        
+        return min(estimated_position, len(group.thumbnails))
 
     def move_page_to_group(self, thumbnail: PageThumbnail, target_group: DocumentGroup):
         """Move page to different group"""
@@ -1251,3 +1307,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         
         for group in self.documentgroups:
             group.pack(pady=5, fill="x", padx=5)
+        
+        # Update scroll region after repacking
+        self.after_idle(self.update_scroll_region)
