@@ -1,0 +1,102 @@
+Elenco del percorso delle cartelle
+Numero di serie del volume: 360C-B8F7
+C:.
+¦   DynamicAI.spec
+¦   DynamicAI_categories.db
+¦   DynamicAI_config.json
+¦   main.py
+¦   README.md
+¦   tree.txt
+¦   
++---build
+¦   +---DynamicAI
+¦       ¦   Analysis-00.toc
+¦       ¦   base_library.zip
+¦       ¦   DynamicAI.pkg
+¦       ¦   EXE-00.toc
+¦       ¦   PKG-00.toc
+¦       ¦   PYZ-00.pyz
+¦       ¦   PYZ-00.toc
+¦       ¦   warn-DynamicAI.txt
+¦       ¦   xref-DynamicAI.html
+¦       ¦   
+¦       +---localpycs
+¦               pyimod01_archive.pyc
+¦               pyimod02_importers.pyc
+¦               pyimod03_ctypes.pyc
+¦               pyimod04_pywin32.pyc
+¦               struct.pyc
+¦               
++---config
+¦   ¦   constants.py
+¦   ¦   settings.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           constants.cpython-313.pyc
+¦           settings.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---database
+¦   ¦   category_db.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           category_db.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---dist
++---export
+¦   ¦   export_manager(OLD).py
+¦   ¦   export_manager.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           export_manager.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---gui
+¦   ¦   category_dialog.py
+¦   ¦   main_window.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---components
+¦   ¦   ¦   document_group.py
+¦   ¦   ¦   thumbnail.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           document_group.cpython-313.pyc
+¦   ¦           thumbnail.cpython-313.pyc
+¦   ¦           __init__.cpython-313.pyc
+¦   ¦           
+¦   +---dialogs
+¦   ¦   ¦   category_dialog.py
+¦   ¦   ¦   settings_dialog.py
+¦   ¦   ¦   __init__.py
+¦   ¦   ¦   
+¦   ¦   +---__pycache__
+¦   ¦           category_dialog.cpython-313.pyc
+¦   ¦           settings_dialog.cpython-313.pyc
+¦   ¦           __init__.cpython-313.pyc
+¦   ¦           
+¦   +---__pycache__
+¦           main_window.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---loaders
+¦   ¦   document_loaders.py
+¦   ¦   __init__.py
+¦   ¦   
+¦   +---__pycache__
+¦           document_loaders.cpython-313.pyc
+¦           __init__.cpython-313.pyc
+¦           
++---utils
+    ¦   helpers.py
+    ¦   __init__.py
+    ¦   
+    +---__pycache__
+            helpers.cpython-313.pyc
+            __init__.cpython-313.pyc
+            
