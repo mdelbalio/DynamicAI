@@ -1,11 +1,11 @@
 {
     "window_settings": {
-        "geometry": "1536x773+100+50",
-        "state": "zoomed"
+        "geometry": "1536x773+-8+0",
+        "state": "normal"
     },
     "panel_settings": {
-        "left_center_position": 265,
-        "center_right_position": 1244
+        "left_center_position": 286,
+        "center_right_position": 1212
     },
     "default_input_folder": "C:/Users/test/Downloads/aidoxa/00001",
     "default_output_folder": "C:/Users/test/Documents/00001 elaborata",

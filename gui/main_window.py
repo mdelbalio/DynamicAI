@@ -306,14 +306,19 @@ class AIDOXAApp(tk.Tk):
         # Bind events
         self.category_combo.bind("<<ComboboxSelected>>", self.on_category_changed)
         self.category_combo.bind("<Return>", self.on_category_enter)
+    
+    
+    
     def setup_metadata_controls(self):
-        """Setup metadata editing controls - NUOVO"""
-        metadata_frame = tk.LabelFrame(self.right_panel, text="Metadati Documento", 
-                                      font=("Arial", 10, "bold"), bg="lightgray", 
-                                      relief="ridge", bd=2)
+        """Setup metadata editing controls - larghezza uniforme con Categoria Documento"""
+        metadata_frame = tk.LabelFrame(
+            self.right_panel, text="Metadati Documento",
+            font=("Arial", 10, "bold"), bg="lightgray",
+            relief="ridge", bd=2
+        )
         metadata_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Create scrollable frame for metadata
+        # Canvas + scrollbar per rendere scrollabile
         canvas = tk.Canvas(metadata_frame, bg="lightgray", highlightthickness=0)
         scrollbar = tk.Scrollbar(metadata_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg="lightgray")
@@ -326,8 +331,9 @@ class AIDOXAApp(tk.Tk):
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Metadata fields
         self.metadata_vars = {}
+        self.metadata_entries = {}
+
         metadata_labels = {
             'NumeroProgetto': 'Numero Progetto:',
             'Intestatario': 'Intestatario:',
@@ -336,28 +342,52 @@ class AIDOXAApp(tk.Tk):
             'EstremiCatastali': 'Estremi Catastali:'
         }
 
+        row = 0
         for field, label_text in metadata_labels.items():
-            field_frame = tk.Frame(scrollable_frame, bg="lightgray")
-            field_frame.pack(fill="x", padx=5, pady=5)
+            lbl = tk.Label(
+                scrollable_frame, text=label_text,
+                font=("Arial", 9, "bold"), bg="lightgray", anchor="w"
+            )
+            lbl.grid(row=row, column=0, sticky="w", padx=5, pady=(5, 0))
 
-            tk.Label(field_frame, text=label_text, font=("Arial", 9, "bold"), 
-                    bg="lightgray", anchor="w").pack(anchor="w")
-            
             self.metadata_vars[field] = tk.StringVar()
-            entry = tk.Entry(field_frame, textvariable=self.metadata_vars[field], 
-                           font=("Arial", 9), bg="white")
-            entry.pack(fill="x", pady=(2, 0))
-            
-            # Bind change event
+            entry = tk.Entry(
+                scrollable_frame, textvariable=self.metadata_vars[field],
+                font=("Arial", 9), bg="white"
+            )
+            entry.grid(row=row+1, column=0, sticky="ew", padx=5, pady=(0, 5), ipady=3)
+            self.metadata_entries[field] = entry
+
+            # Bind event per salvataggio in header_metadata
             self.metadata_vars[field].trace('w', lambda *args, f=field: self.on_metadata_changed(f))
+
+            row += 2
+
+        # Allineamento larghezza con la combobox delle categorie
+        def sync_entry_width(event=None):
+            try:
+                target_width = self.category_combo.winfo_width()
+                if target_width > 50:
+                    for entry in self.metadata_entries.values():
+                        entry.config(width=0)  # reset
+                        entry.update_idletasks()
+                        entry.configure(width=int(target_width/7))  # approx char width
+            except Exception as e:
+                self.debug_print(f"Sync entry width failed: {e}")
+
+        # Bind al resize della combobox e del pannello destro
+        self.category_combo.bind("<Configure>", sync_entry_width)
+        self.right_panel.bind("<Configure>", sync_entry_width)
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # Mouse wheel scrolling for metadata
+
+        # Scroll con rotellina
         def on_metadata_mousewheel(event):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-        
+
+
         canvas.bind("<MouseWheel>", on_metadata_mousewheel)
         scrollable_frame.bind("<MouseWheel>", on_metadata_mousewheel)
 
