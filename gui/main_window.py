@@ -81,6 +81,10 @@ class AIDOXAApp(tk.Tk):
         
         # UI state
         self.updating_ui = False
+        
+        # Pan mode state
+        self.pan_mode = False
+        self.pan_start = None
 
     def setup_window(self):
         """Setup main window properties"""
@@ -214,16 +218,31 @@ class AIDOXAApp(tk.Tk):
 
     def setup_center_panel(self):
         """Setup center panel for image display"""
-        # Image display area
-        self.image_canvas = tk.Canvas(self.center_panel, bg="black", cursor="cross")
-        self.image_canvas.pack(fill="both", expand=True, padx=2, pady=2)
+        # Frame contenitore con scrollbar
+        self.image_frame = tk.Frame(self.center_panel, bg="black")
+        self.image_frame.pack(fill="both", expand=True, padx=2, pady=2)
+
+        # Scrollbars
+        self.xscrollbar = tk.Scrollbar(self.image_frame, orient=tk.HORIZONTAL)
+        self.xscrollbar.pack(side="bottom", fill="x")
+        self.yscrollbar = tk.Scrollbar(self.image_frame, orient=tk.VERTICAL)
+        self.yscrollbar.pack(side="right", fill="y")
+
+        # Canvas con scroll
+        self.image_canvas = tk.Canvas(
+            self.image_frame, bg="black", cursor="cross",
+            xscrollcommand=self.xscrollbar.set, yscrollcommand=self.yscrollbar.set
+        )
+        self.image_canvas.pack(side="left", fill="both", expand=True)
+
+        self.xscrollbar.config(command=self.image_canvas.xview)
+        self.yscrollbar.config(command=self.image_canvas.yview)
 
         # Zoom controls at bottom
         self.setup_zoom_controls()
-        
+
         # Bind image canvas events
         self.bind_image_events()
-
     def setup_zoom_controls(self):
         """Setup zoom control buttons"""
         zoom_frame = tk.Frame(self.center_panel, bg="darkgray", height=50)
@@ -238,6 +257,8 @@ class AIDOXAApp(tk.Tk):
                  bg="yellow", font=("Arial", 9)).pack(side="left", padx=2)
         tk.Button(zoom_frame, text="Zoom Area", command=self.toggle_zoom_area, 
                  bg="lightgreen", font=("Arial", 9)).pack(side="left", padx=2)
+        tk.Button(zoom_frame, text="Pan", command=self.toggle_pan_mode, 
+                 bg="lightblue", font=("Arial", 9)).pack(side="left", padx=2)
 
         # Status label
         self.zoom_status = tk.Label(zoom_frame, text="", bg="darkgray", fg="white", font=("Arial", 8))
@@ -245,16 +266,20 @@ class AIDOXAApp(tk.Tk):
 
     def bind_image_events(self):
         """Bind events for image canvas"""
+        # Click-to-fit (solo se non in pan/zoom-area)
         self.image_canvas.bind("<Button-1>", self.on_image_click)
-        self.image_canvas.bind("<ButtonPress-1>", self.on_zoom_rect_start)
-        self.image_canvas.bind("<B1-Motion>", self.on_zoom_rect_drag)
-        self.image_canvas.bind("<ButtonRelease-1>", self.on_zoom_rect_end)
+        # Zoom area
+        self.image_canvas.bind("<ButtonPress-1>", self.on_zoom_rect_start, add='+')
+        self.image_canvas.bind("<B1-Motion>", self.on_zoom_rect_drag, add='+')
+        self.image_canvas.bind("<ButtonRelease-1>", self.on_zoom_rect_end, add='+')
+        # Pan (usa scan_mark/dragto)
+        self.image_canvas.bind("<ButtonPress-1>", self.on_pan_start, add='+')
+        self.image_canvas.bind("<B1-Motion>", self.on_pan_move, add='+')
         self.image_canvas.bind("<Configure>", self.on_canvas_resize)
-        
+
         # Hover effects
         self.image_canvas.bind("<Enter>", self.on_canvas_enter)
         self.image_canvas.bind("<Leave>", self.on_canvas_leave)
-
     def setup_right_panel(self):
         """Setup right panel with controls and metadata"""
         # Header
@@ -1079,13 +1104,15 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
 
     def on_image_click(self, event):
         """Handle image click - click-to-fit"""
-        if not self.zoom_area_mode and self.current_image:
+        if self.current_image and not self.zoom_area_mode and not self.pan_mode:
             self.auto_fit_on_resize = True
             if self.config_manager.get('auto_fit_images', True):
                 self.zoom_fit()
 
     def on_zoom_rect_start(self, event):
         """Start zoom rectangle selection"""
+        if self.pan_mode:
+            return
         if self.zoom_area_mode and self.current_image:
             self.zoom_rect_start = (event.x, event.y)
             if self.zoom_rect_id:
@@ -1093,6 +1120,10 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
 
     def on_zoom_rect_drag(self, event):
         """Drag zoom rectangle"""
+        if self.pan_mode:
+            return
+        if self.pan_mode:
+            return
         if self.zoom_area_mode and self.zoom_rect_start and self.current_image:
             if self.zoom_rect_id:
                 self.image_canvas.delete(self.zoom_rect_id)
@@ -1118,6 +1149,25 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             self.image_canvas.config(cursor="cross")
             self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
 
+    def toggle_pan_mode(self):
+        """Toggle pan mode"""
+        self.pan_mode = not self.pan_mode
+        if self.pan_mode:
+            self.image_canvas.config(cursor="fleur")
+            self.zoom_status.config(text="Modalità Pan attiva")
+        else:
+            self.image_canvas.config(cursor="cross")
+            self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
+
+    def on_pan_start(self, event):
+        """Start canvas panning"""
+        if self.pan_mode and self.current_image:
+            self.image_canvas.scan_mark(event.x, event.y)
+
+    def on_pan_move(self, event):
+        """Canvas panning drag"""
+        if self.pan_mode and self.current_image:
+            self.image_canvas.scan_dragto(event.x, event.y, gain=1)
     def zoom_to_area(self, x: int, y: int, w: int, h: int):
         """Zoom to specific area"""
         if not self.current_image:
@@ -1141,30 +1191,39 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
 
     def update_image_display(self):
-        """Update the image display on canvas"""
+        """Update the image display on canvas with scroll support"""
         if not self.current_image:
             return
-        
+
         self.image_canvas.delete("all")
-        
+
         img_w, img_h = self.current_image.size
         new_w = int(img_w * self.zoom_factor)
         new_h = int(img_h * self.zoom_factor)
-        
-        if new_w > 0 and new_h > 0:
-            try:
-                resized_img = self.current_image.resize((new_w, new_h), RESAMPLEFILTER)
-                self.photo = ImageTk.PhotoImage(resized_img)
-                
-                canvas_w = self.image_canvas.winfo_width()
-                canvas_h = self.image_canvas.winfo_height()
-                
-                x = canvas_w // 2 + self.image_offset_x
-                y = canvas_h // 2 + self.image_offset_y
-                
-                self.image_canvas.create_image(x, y, image=self.photo)
-            except Exception as e:
-                self.debug_print(f"Error updating image display: {e}")
+
+        if new_w <= 0 or new_h <= 0:
+            return
+
+        try:
+            resized_img = self.current_image.resize((new_w, new_h), RESAMPLEFILTER)
+            self.photo = ImageTk.PhotoImage(resized_img)
+
+            canvas_w = self.image_canvas.winfo_width()
+            canvas_h = self.image_canvas.winfo_height()
+
+            pad_x = max(0, (canvas_w - new_w) // 2)
+            pad_y = max(0, (canvas_h - new_h) // 2)
+
+            # Disegna immagine ancorata a NW (con eventuale padding per centrare se più piccola)
+            self.image_canvas.create_image(pad_x, pad_y, image=self.photo, anchor="nw")
+
+            # Scrollregion: area massima tra canvas e immagine
+            sr_w = max(new_w, canvas_w)
+            sr_h = max(new_h, canvas_h)
+            self.image_canvas.config(scrollregion=(0, 0, sr_w, sr_h))
+
+        except Exception as e:
+            self.debug_print(f"Error updating image display: {e}")
     def create_drag_preview(self, thumbnail: PageThumbnail):
         """Create drag preview window"""
         self.drag_item = thumbnail
