@@ -34,9 +34,10 @@ DEFAULT_CONFIG = {
     'thumbnail_width': 80,
     'thumbnail_height': 100,
     'last_folder': '',
+    'csv_delimiter': ';',  # NUOVO: delimitatore CSV
     'application_info': {
         'name': 'DynamicAI Editor',
-        'version': '3.3',
+        'version': '3.4',  # AGGIORNATO
         'created': '2025'
     }
 }

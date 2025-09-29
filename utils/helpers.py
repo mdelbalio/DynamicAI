@@ -35,87 +35,102 @@ def create_progress_dialog(parent: tk.Widget, title: str = "Elaborazione in cors
     return progress_window, progress_var, progress_info
 
 def show_help_dialog(parent: tk.Widget):
-    """Show comprehensive help dialog"""
-    help_text = """ISTRUZIONI OPERATIVE DynamicAI:
+    """Show comprehensive help dialog - MODIFICATO"""
+    help_text = """ISTRUZIONI OPERATIVE DynamicAI v3.4:
 
 CARICAMENTO DOCUMENTI:
-• Configura cartelle input/output nelle Preferenze
-• Usa "Aggiorna Lista (Preview)" per caricare automaticamente
-• I documenti vengono caricati dalla cartella input configurata
+- Configura cartelle input/output nelle Preferenze
+- Usa "Aggiorna Lista (Preview)" per caricare automaticamente
+- I documenti vengono caricati dalla cartella input configurata
+
+METADATI (NUOVO v3.4):
+- I metadati vengono letti automaticamente dall'header del file JSON
+- Campi disponibili: NumeroProgetto, Intestatario, IndirizzoImmobile, 
+  LavoroEseguito, EstremiCatastali
+- Tutti i campi sono editabili nel pannello destro
+- Le modifiche vengono automaticamente incluse nell'export CSV
 
 CONFIGURAZIONE DOCUMENTI:
-• Contatore documenti con numero di cifre personalizzabile
-• Font e dimensione personalizzabili per le intestazioni
-• Formato intestazione: [NNNN] Categoria (es: 0001 Documentazione)
-• Allineamento testo a sinistra
-• Hover su intestazione per evidenziazione
+- Contatore documenti con numero di cifre personalizzabile
+- Font e dimensione personalizzabili per le intestazioni
+- Formato intestazione: [NNNN] Categoria (es: 0001 Documentazione)
+- Allineamento testo a sinistra
+- Hover su intestazione per evidenziazione
 
 SELEZIONE:
-• Click su miniatura: seleziona pagina e documento
-• Click su intestazione documento: seleziona intero documento
-• Hover con mouse: evidenziazione automatica
-• Elementi selezionati sono evidenziati in blu/oro
+- Click su miniatura: seleziona pagina e documento
+- Click su intestazione documento: seleziona intero documento
+- Hover con mouse: evidenziazione automatica
+- Elementi selezionati sono evidenziati in blu/oro
 
 DRAG & DROP:
-• Trascina miniature per spostarle tra documenti
-• Trascina per riordinare dentro stesso documento
-• Il sistema distingue automaticamente tra click e drag
-• L'anteprima gialla segue il mouse durante il trascinamento
+- Trascina miniature per spostarle tra documenti
+- Trascina per riordinare dentro stesso documento
+- Il sistema distingue automaticamente tra click e drag
+- L'anteprima gialla segue il mouse durante il trascinamento
 
 ZOOM IMMAGINE:
-• Zoom +/- : Ingrandisce/rimpicciolisce l'immagine
-• Fit: Adatta immagine alla finestra centrale
-• Click singolo su immagine: torna al fit automatico
-• Zoom Area: Seleziona rettangolo con il mouse per zoom
-• Hover su immagine: sfondo più scuro per feedback
+- Zoom +/- : Ingrandisce/rimpicciolisce l'immagine
+- Fit: Adatta immagine alla finestra centrale
+- Click singolo su immagine: torna al fit automatico
+- Zoom Area: Seleziona rettangolo con il mouse per zoom
+- Hover su immagine: sfondo più scuro per feedback
 
 PANNELLI INDIPENDENTI:
-• Trascina il separatore sinistro per ridimensionare pannello sinistra/centro
-• Trascina il separatore destro per ridimensionare pannello centro/destra
-• I due separatori sono completamente indipendenti
-• Impostazioni salvate automaticamente
+- Trascina il separatore sinistro per ridimensionare pannello sinistra/centro
+- Trascina il separatore destro per ridimensionare pannello centro/destra
+- I due separatori sono completamente indipendenti
+- Impostazioni salvate automaticamente
 
 GESTIONE DOCUMENTI:
-• Tasto destro su intestazione: menu contestuale
-• Crea nuovo documento: popup con categorie esistenti + nuove
-• Database categorie: salva categorie personali tra sessioni
-• Elimina documenti vuoti (senza pagine)
-• Rinumerazione automatica della sequenza
+- Tasto destro su intestazione: menu contestuale
+- Crea nuovo documento: popup con categorie esistenti + nuove
+- Database categorie: salva categorie personali tra sessioni
+- Elimina documenti vuoti (senza pagine)
+- Rinumerazione automatica della sequenza
 
 GESTIONE CATEGORIE:
-• Database SQLite locale per categorie personali
-• Colori diversi: verde (da JSON), blu (da database)
-• Ricerca categorie nel popup di selezione
-• Combobox modificabile nel pannello destro
-• Salvataggio automatico di nuove categorie
+- Database SQLite locale per categorie personali
+- Colori diversi: verde (da JSON), blu (da database)
+- Ricerca categorie nel popup di selezione
+- Combobox modificabile nel pannello destro
+- Salvataggio automatico di nuove categorie
 
 CAMBIO CATEGORIA:
-• Seleziona documento (intestazione o miniatura)
-• Combobox modificabile: categorie esistenti + crea nuove
-• Salvataggio automatico nel database
+- Seleziona documento (intestazione o miniatura)
+- Combobox modificabile: categorie esistenti + crea nuove
+- Salvataggio automatico nel database
 
 GESTIONE FILE ESISTENTI:
-• Rinomina automatica: file.pdf → file(1).pdf → file(2).pdf
-• Chiedi conferma: popup prima di sovrascrivere
-• Sovrascrivi sempre: sovrascrive senza chiedere
-• Backup opzionale: crea file.backup prima di sovrascrivere
+- Rinomina automatica: file.pdf → file(1).pdf → file(2).pdf
+- Chiedi conferma: popup prima di sovrascrivere
+- Sovrascrivi sempre: backup opzionale
+- Sistema numerazione Windows-style
 
-EXPORT MIGLIORATO:
-• JPEG: file singoli per ogni pagina
-• PDF Singolo: file PDF per ogni pagina
-• PDF Multi-pagina: un PDF per ogni documento
-• TIFF Singolo: file TIFF per ogni pagina
-• TIFF Multi-pagina: un TIFF per ogni documento
-• Qualità JPEG configurabile
-• Gestione intelligente file esistenti
+EXPORT MIGLIORATO (v3.4):
+- JPEG: file singoli per ogni pagina
+- PDF Singolo: file PDF per ogni pagina
+- PDF Multi-pagina: un PDF per ogni documento
+- TIFF Singolo: file TIFF per ogni pagina
+- TIFF Multi-pagina: un TIFF per ogni documento
+- Qualità JPEG configurabile
+- Gestione intelligente file esistenti
+- NUOVO: Export automatico CSV con metadati
+
+EXPORT CSV (NUOVO v3.4):
+- Nome file CSV = nome cartella input
+- Contiene tutti i metadati per ogni documento/file
+- Delimitatore configurabile (default: punto e virgola)
+- Formato: Nome File; Categoria; NumeroProgetto; Intestatario; 
+  IndirizzoImmobile; LavoroEseguito; EstremiCatastali
 
 SCORCIATOIE:
-• Ctrl+R: Aggiorna Lista
-• Ctrl+E: Completa Sequenza / Export
-• Ctrl+Q: Esci"""
+- Ctrl+R: Aggiorna Lista
+- Ctrl+E: Completa Sequenza / Export
+- Ctrl+Q: Esci"""
     
     help_window = tk.Toplevel(parent)
-    help_window.title("Aiuto DynamicAI")
+    help_window.title("Aiuto DynamicAI v3.4")
     help_window.geometry("750x950")
     help_window.transient(parent)
     
@@ -128,22 +143,26 @@ SCORCIATOIE:
              bg="lightblue").pack(pady=10)
 
 def show_about_dialog(parent: tk.Widget):
-    """Show about dialog with application information"""
+    """Show about dialog with application information - MODIFICATO"""
     from config.settings import CONFIG_FILE, DB_FILE
     
     about_text = (f"DynamicAI - Editor Lineare Avanzato\n\n"
                  f"File di configurazione:\n{CONFIG_FILE}\n\n"
                  f"Database categorie:\n{DB_FILE}\n\n"
-                 f"Versione: 3.3\n"
+                 f"Versione: 3.4\n"
                  f"Sviluppato con Python e Tkinter\n\n"
-                 f"Nuove Funzionalità v3.3:\n"
+                 f"Nuove Funzionalità v3.4:\n"
+                 f"• Gestione completa metadati da JSON\n"
+                 f"• Campi metadati editabili nell'interfaccia\n"
+                 f"• Export automatico CSV con metadati\n"
+                 f"• Nome CSV basato su cartella input\n"
+                 f"• Delimitatore CSV configurabile\n"
+                 f"• Integrazione metadati in export\n\n"
+                 f"Funzionalità v3.3:\n"
                  f"• Gestione intelligente file esistenti\n"
                  f"• Rinominazione automatica stile Windows\n"
                  f"• Modalità backup migliorata\n"
-                 f"• Tre opzioni per file duplicati\n"
-                 f"• Sistema di numerazione (1), (2), (3)...\n"
-                 f"• Controllo avanzato sovrascritture\n"
-                 f"• Architettura modulare migliorata")
+                 f"• Architettura modulare")
     
     messagebox.showinfo("Informazioni", about_text)
 

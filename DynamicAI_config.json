@@ -5,7 +5,7 @@
     },
     "panel_settings": {
         "left_center_position": 265,
-        "center_right_position": 1211
+        "center_right_position": 1244
     },
     "default_input_folder": "C:/Users/test/Downloads/aidoxa/00001",
     "default_output_folder": "C:/Users/test/Documents/00001 elaborata",
@@ -24,6 +24,7 @@
     "thumbnail_width": 67,
     "thumbnail_height": 87,
     "last_folder": "C:/Users/test/Documents/00001 elaborata",
+    "csv_delimiter": ";",
     "application_info": {
         "name": "DinamicAI Editor",
         "version": "2.0",

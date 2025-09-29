@@ -192,7 +192,24 @@ class SettingsDialog:
         tk.Spinbox(quality_control_frame, from_=1, to=100, width=5, 
                   textvariable=self.jpeg_quality_var).pack(side="left", padx=(5, 0))
         
-        # GESTIONE FILE ESISTENTI - SEZIONE COMPLETA RIPRISTINATA
+        # NUOVO: CSV Settings
+        csv_frame = tk.LabelFrame(save_frame, text="Impostazioni CSV", 
+                                 font=("Arial", 10, "bold"))
+        csv_frame.pack(fill="x", padx=10, pady=5)
+        
+        csv_delimiter_frame = tk.Frame(csv_frame)
+        csv_delimiter_frame.pack(padx=10, pady=5)
+        
+        tk.Label(csv_delimiter_frame, text="Delimitatore CSV:", font=("Arial", 9)).pack(side="left")
+        self.csv_delimiter_var = tk.StringVar(value=self.config_data.get('csv_delimiter', ';'))
+        csv_combo = ttk.Combobox(csv_delimiter_frame, textvariable=self.csv_delimiter_var, 
+                                values=[';', ',', '\t', '|'], width=5, state="readonly")
+        csv_combo.pack(side="left", padx=(5, 0))
+        
+        tk.Label(csv_frame, text="Il CSV conterrà tutti i metadati per ogni file esportato", 
+                font=("Arial", 8), fg="gray").pack(anchor="w", padx=10, pady=(0, 5))
+        
+        # GESTIONE FILE ESISTENTI
         save_options_frame = tk.LabelFrame(save_frame, text="Gestione File Esistenti", 
                                           font=("Arial", 10, "bold"))
         save_options_frame.pack(fill="x", padx=10, pady=5)
@@ -232,7 +249,7 @@ class SettingsDialog:
                 self.backup_checkbox.config(state="disabled")
         
         self.file_handling_var.trace('w', lambda *args: on_file_handling_change())
-        on_file_handling_change()  # Chiamata iniziale
+        on_file_handling_change()
         
         # Auto save checkbox
         self.auto_save_var = tk.BooleanVar(value=self.config_data.get('auto_save_changes', True))
@@ -297,7 +314,7 @@ class SettingsDialog:
         db_info_text.pack()
 
     def create_buttons(self, parent):
-        """Create dialog buttons - sempre visibili in basso"""
+        """Create dialog buttons"""
         button_frame = tk.Frame(parent, bg="lightgray", relief="raised", bd=1)
         button_frame.pack(fill="x", side="bottom", pady=(10, 0))
         
@@ -355,6 +372,7 @@ class SettingsDialog:
             self.font_bold_var.set(DEFAULT_CONFIG['document_font_bold'])
             self.export_format_var.set(DEFAULT_CONFIG['export_format'])
             self.jpeg_quality_var.set(DEFAULT_CONFIG['jpeg_quality'])
+            self.csv_delimiter_var.set(DEFAULT_CONFIG['csv_delimiter'])
             self.file_handling_var.set(DEFAULT_CONFIG['file_handling_mode'])
             self.create_backup_var.set(DEFAULT_CONFIG['create_backup_on_overwrite'])
             self.auto_save_var.set(DEFAULT_CONFIG['auto_save_changes'])
@@ -375,9 +393,10 @@ class SettingsDialog:
             'document_font_bold': self.font_bold_var.get(),
             'export_format': self.export_format_var.get(),
             'jpeg_quality': self.jpeg_quality_var.get(),
-            'file_handling_mode': self.file_handling_var.get(),  # AGGIUNTO
-            'create_backup_on_overwrite': self.create_backup_var.get(),  # AGGIUNTO
-            'auto_save_changes': self.auto_save_var.get(),  # AGGIUNTO
+            'csv_delimiter': self.csv_delimiter_var.get(),
+            'file_handling_mode': self.file_handling_var.get(),
+            'create_backup_on_overwrite': self.create_backup_var.get(),
+            'auto_save_changes': self.auto_save_var.get(),
             'save_window_layout': self.save_layout_var.get(),
             'auto_fit_images': self.auto_fit_var.get(),
             'show_debug_info': self.show_debug_var.get(),

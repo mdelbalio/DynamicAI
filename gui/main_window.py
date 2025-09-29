@@ -1,14 +1,15 @@
 """
-Main window for DynamicAI application with multi-row grid support
+Main window for DynamicAI application with multi-row grid support and metadata management
 """
 
 import os
 import json
+import csv
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from PIL import Image, ImageTk
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict
 
 # Internal imports
 from config import ConfigManager, DB_FILE
@@ -21,7 +22,7 @@ from utils import create_progress_dialog, show_help_dialog, show_about_dialog
 from config.constants import RESAMPLEFILTER
 
 class AIDOXAApp(tk.Tk):
-    """Main application window for DynamicAI with multi-row grid support"""
+    """Main application window for DynamicAI with multi-row grid support and metadata"""
     
     def __init__(self):
         super().__init__()
@@ -49,6 +50,16 @@ class AIDOXAApp(tk.Tk):
         self.current_document_name = ""
         self.all_categories: Set[str] = set()
         
+        # Metadata management - NUOVO
+        self.header_metadata: Dict[str, str] = {
+            'NumeroProgetto': '',
+            'Intestatario': '',
+            'IndirizzoImmobile': '',
+            'LavoroEseguito': '',
+            'EstremiCatastali': ''
+        }
+        self.input_folder_name = ""
+        
         # Selection state
         self.selected_thumbnail: Optional[PageThumbnail] = None
         self.selected_group: Optional[DocumentGroup] = None
@@ -73,7 +84,7 @@ class AIDOXAApp(tk.Tk):
 
     def setup_window(self):
         """Setup main window properties"""
-        self.title("DynamicAI - Editor Lineare Avanzato")
+        self.title("DynamicAI - Editor Lineare Avanzato v3.4")
         
         # Set window geometry from config
         window_settings = self.config_manager.get('window_settings', {})
@@ -245,7 +256,7 @@ class AIDOXAApp(tk.Tk):
         self.image_canvas.bind("<Leave>", self.on_canvas_leave)
 
     def setup_right_panel(self):
-        """Setup right panel with controls and details"""
+        """Setup right panel with controls and metadata"""
         # Header
         header_right = tk.Label(self.right_panel, text="Controlli e Dettagli", 
                                font=("Arial", 12, "bold"), bg="lightgray")
@@ -264,6 +275,9 @@ class AIDOXAApp(tk.Tk):
                                        font=("Arial", 10), bg="lightgray")
         self.page_info_label.pack(pady=10)
 
+        # NUOVO: Metadata frame
+        self.setup_metadata_controls()
+
         # Instructions text area
         self.setup_instructions_area()
 
@@ -280,7 +294,6 @@ class AIDOXAApp(tk.Tk):
         combo_frame.pack(fill="x", padx=5, pady=5)
         
         self.category_var = tk.StringVar()
-        # Editable combobox (not readonly)
         self.category_combo = ttk.Combobox(combo_frame, textvariable=self.category_var, 
                                           font=("Arial", 9))
         self.category_combo.pack(side="left", fill="x", expand=True)
@@ -293,6 +306,60 @@ class AIDOXAApp(tk.Tk):
         # Bind events
         self.category_combo.bind("<<ComboboxSelected>>", self.on_category_changed)
         self.category_combo.bind("<Return>", self.on_category_enter)
+    def setup_metadata_controls(self):
+        """Setup metadata editing controls - NUOVO"""
+        metadata_frame = tk.LabelFrame(self.right_panel, text="Metadati Documento", 
+                                      font=("Arial", 10, "bold"), bg="lightgray", 
+                                      relief="ridge", bd=2)
+        metadata_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Create scrollable frame for metadata
+        canvas = tk.Canvas(metadata_frame, bg="lightgray", highlightthickness=0)
+        scrollbar = tk.Scrollbar(metadata_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="lightgray")
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Metadata fields
+        self.metadata_vars = {}
+        metadata_labels = {
+            'NumeroProgetto': 'Numero Progetto:',
+            'Intestatario': 'Intestatario:',
+            'IndirizzoImmobile': 'Indirizzo Immobile:',
+            'LavoroEseguito': 'Lavoro Eseguito:',
+            'EstremiCatastali': 'Estremi Catastali:'
+        }
+
+        for field, label_text in metadata_labels.items():
+            field_frame = tk.Frame(scrollable_frame, bg="lightgray")
+            field_frame.pack(fill="x", padx=5, pady=5)
+
+            tk.Label(field_frame, text=label_text, font=("Arial", 9, "bold"), 
+                    bg="lightgray", anchor="w").pack(anchor="w")
+            
+            self.metadata_vars[field] = tk.StringVar()
+            entry = tk.Entry(field_frame, textvariable=self.metadata_vars[field], 
+                           font=("Arial", 9), bg="white")
+            entry.pack(fill="x", pady=(2, 0))
+            
+            # Bind change event
+            self.metadata_vars[field].trace('w', lambda *args, f=field: self.on_metadata_changed(f))
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Mouse wheel scrolling for metadata
+        def on_metadata_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        canvas.bind("<MouseWheel>", on_metadata_mousewheel)
+        scrollable_frame.bind("<MouseWheel>", on_metadata_mousewheel)
 
     def setup_instructions_area(self):
         """Setup instructions text area"""
@@ -300,11 +367,11 @@ class AIDOXAApp(tk.Tk):
                                      font=("Arial", 10, "bold"), bg="lightgray")
         instructions_label.pack(pady=(20, 5))
 
-        self.instructions_text = ScrolledText(self.right_panel, height=15, width=35)
+        self.instructions_text = ScrolledText(self.right_panel, height=10, width=35)
         self.instructions_text.pack(fill="both", expand=True, padx=5, pady=5)
 
         # Default instructions
-        self.update_instructions("Configura le cartelle input/output nelle Preferenze e usa 'Aggiorna Lista (Preview)' per iniziare.\n\nUsa il menu 'Aiuto > Istruzioni' per vedere le funzionalità complete.\n\nNuova funzionalità: Layout a griglia multi-riga per i documenti con molte pagine!")
+        self.update_instructions("Configura le cartelle input/output nelle Preferenze e usa 'Aggiorna Lista (Preview)' per iniziare.\n\nNuovo in v3.4: Gestione metadati e export CSV!")
 
     def bind_events(self):
         """Bind keyboard shortcuts and window events"""
@@ -355,15 +422,12 @@ class AIDOXAApp(tk.Tk):
         
         if self.selected_group:
             if new_category != self.selected_group.categoryname:
-                # Update the entire group's category
                 old_category = self.selected_group.categoryname
                 self.selected_group.update_category_name(new_category)
                 self.page_info_label.config(text=f"Documento: {new_category} ({len(self.selected_group.pages)} pagine)")
                 
-                # Save new category to database
                 self.category_db.add_category(new_category)
                 
-                # If a thumbnail is also selected, update its display
                 if self.selected_thumbnail:
                     self.selection_info.config(text=f"Selezionata: Pagina {self.selected_thumbnail.pagenum}")
                 
@@ -372,6 +436,12 @@ class AIDOXAApp(tk.Tk):
     def on_category_enter(self, event):
         """Handle Enter key in category combo"""
         self.save_new_category()
+
+    def on_metadata_changed(self, field_name):
+        """Handle metadata field change - NUOVO"""
+        new_value = self.metadata_vars[field_name].get()
+        self.header_metadata[field_name] = new_value
+        self.debug_print(f"Metadata {field_name} changed to: {new_value}")
 
     def on_canvas_resize(self, event):
         """Handle canvas resize to update image display"""
@@ -389,14 +459,12 @@ class AIDOXAApp(tk.Tk):
     def save_config(self):
         """Save current configuration"""
         try:
-            # Update window settings
             if self.config_manager.get('save_window_layout', True):
                 self.config_manager.config_data['window_settings'] = {
                     'geometry': self.geometry(),
                     'state': self.state()
                 }
                 
-                # Save panel positions
                 try:
                     if hasattr(self, 'main_paned'):
                         left_center_pos = self.main_paned.sash_coord(0)[0]
@@ -421,7 +489,6 @@ class AIDOXAApp(tk.Tk):
         try:
             panel_settings = self.config_manager.get('panel_settings', {})
             
-            # Restore panel positions
             left_center_pos = panel_settings.get('left_center_position', 400)
             if hasattr(self, 'main_paned') and left_center_pos > 50:
                 self.main_paned.sash_place(0, left_center_pos, 0)
@@ -472,7 +539,6 @@ class AIDOXAApp(tk.Tk):
                 self.config_manager.get('document_counter_digits', 4)
             )
             
-            # Refresh if settings changed
             if old_thumb_size != new_thumb_size:
                 self.refresh_thumbnails()
             
@@ -497,7 +563,6 @@ class AIDOXAApp(tk.Tk):
         
         for group in self.documentgroups:
             group.refresh_thumbnail_sizes()
-            # Force grid repack after size changes
             self.after_idle(lambda g=group: g.repack_thumbnails_grid())
 
     def refresh_document_headers(self):
@@ -513,11 +578,8 @@ class AIDOXAApp(tk.Tk):
         """Save new category from combobox"""
         new_category = self.category_var.get().strip()
         if new_category and new_category not in [self.category_combo['values']]:
-            # Save to database
             if self.category_db.add_category(new_category):
-                # Update combobox values
                 self.update_category_combo()
-                # Apply to selected group if any
                 if self.selected_group and new_category != self.selected_group.categoryname:
                     old_category = self.selected_group.categoryname
                     self.selected_group.update_category_name(new_category)
@@ -542,9 +604,24 @@ class AIDOXAApp(tk.Tk):
         all_cats = sorted(set(json_categories + db_categories))
         self.category_combo['values'] = all_cats
 
+    def load_metadata_from_json(self, data):
+        """Load metadata from JSON header - NUOVO"""
+        header = data.get('header', {})
+        
+        self.header_metadata['NumeroProgetto'] = header.get('NumeroProgetto', '')
+        self.header_metadata['Intestatario'] = header.get('Intestatario', '')
+        self.header_metadata['IndirizzoImmobile'] = header.get('IndirizzoImmobile', '')
+        self.header_metadata['LavoroEseguito'] = header.get('LavoroEseguito', '')
+        self.header_metadata['EstremiCatastali'] = header.get('EstremiCatastali', '')
+        
+        for field, value in self.header_metadata.items():
+            self.metadata_vars[field].set(value)
+        
+        self.debug_print(f"Loaded metadata: {self.header_metadata}")
+
     # Document loading and management
     def refresh_document_list(self):
-        """Load document from configured input folder"""
+        """Load document from configured input folder - MODIFICATO"""
         input_folder = self.config_manager.get('default_input_folder', '')
         
         if not input_folder or not os.path.exists(input_folder):
@@ -552,6 +629,8 @@ class AIDOXAApp(tk.Tk):
                                "Cartella input non configurata o non esistente.\n"
                                "Configura la cartella nelle Preferenze.")
             return
+
+        self.input_folder_name = os.path.basename(os.path.normpath(input_folder))
 
         json_file = None
         doc_file = None
@@ -571,24 +650,23 @@ class AIDOXAApp(tk.Tk):
             with open(json_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self.original_data = data
+            
+            self.load_metadata_from_json(data)
+            
             categories = data.get("categories", [])
 
-            # Store document name for export
             self.current_document_name = os.path.splitext(os.path.basename(doc_file))[0]
 
-            # Collect all unique categories
             self.all_categories = set(cat['categoria'] for cat in categories if cat['categoria'] != "Pagina vuota")
             
-            # Update category combo with both JSON and DB categories
             self.update_category_combo()
 
             self.load_document(doc_file)
             self.build_document_groups(categories)
             
-            # Update instructions with loaded document info
             self.update_document_instructions(json_file, doc_file, input_folder, categories)
             
-            self.debug_print(f"Document loaded: {len(categories)} categories, {len(self.documentgroups)} documents, {self.documentloader.totalpages if self.documentloader else 0} pages")
+            self.debug_print(f"Document loaded: {len(categories)} categories, {len(self.documentgroups)} documents")
             
         except Exception as e:
             messagebox.showerror("Errore", f"Errore nel caricamento: {str(e)}")
@@ -601,14 +679,12 @@ class AIDOXAApp(tk.Tk):
         except Exception as e:
             messagebox.showerror("Errore", f"Errore nel caricamento del documento: {str(e)}")
             self.documentloader = None
-
     def build_document_groups(self, categories: List[dict]):
         """Build document groups from category data with improved grid layout"""
         if self.updating_ui:
             return
         self.updating_ui = True
 
-        # Clear existing groups
         for group in self.documentgroups:
             group.destroy()
         self.documentgroups.clear()
@@ -617,35 +693,29 @@ class AIDOXAApp(tk.Tk):
         current_pages = []
         documents = []
 
-        # Process categories and merge "Pagina vuota" with previous group
         for cat in categories:
             cat_name = cat['categoria']
             start = cat['inizio']
             end = cat['fine']
             
             if cat_name == "Pagina vuota" and current_group is not None:
-                # Add empty pages to current group
                 for p in range(start, end+1):
                     current_pages.append(p)
             else:
-                # Save previous group if exists
                 if current_group is not None:
                     documents.append({
                         "categoria": current_group,
                         "pagine": current_pages.copy()
                     })
-                # Start new group
                 current_group = cat_name
                 current_pages = list(range(start, end+1))
         
-        # Add last group
         if current_group is not None:
             documents.append({
                 "categoria": current_group,
                 "pagine": current_pages.copy()
             })
 
-        # Create UI groups with document counter
         document_counter = 1
         for doc in documents:
             group = DocumentGroup(self.content_frame, doc["categoria"], self, document_counter)
@@ -657,7 +727,6 @@ class AIDOXAApp(tk.Tk):
             self.documentgroups.append(group)
             document_counter += 1
 
-        # Force update of scroll region after all groups are added
         self.after_idle(self.update_scroll_region)
         
         self.updating_ui = False
@@ -669,7 +738,7 @@ class AIDOXAApp(tk.Tk):
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def update_document_instructions(self, json_file: str, doc_file: str, input_folder: str, categories: List):
-        """Update instructions panel with document information including grid layout info"""
+        """Update instructions panel with document information including metadata"""
         export_format = self.config_manager.get('export_format', 'JPEG')
         format_display = {
             'JPEG': 'JPEG',
@@ -688,7 +757,6 @@ class AIDOXAApp(tk.Tk):
         
         db_categories_count = len(self.category_db.get_all_categories())
         
-        # Count total pages per document for grid info
         grid_info = ""
         for i, group in enumerate(self.documentgroups):
             page_count = group.get_page_count()
@@ -698,69 +766,39 @@ class AIDOXAApp(tk.Tk):
             if page_count > 0:
                 grid_info += f"  Doc {i+1}: {page_count} pagine ({grid_rows} righe, {per_row}/riga)\n"
         
+        metadata_info = "\n".join([f"  {k}: {v}" for k, v in self.header_metadata.items() if v])
+        
         instructions = f"""DOCUMENTO CARICATO:
 
 File JSON: {os.path.basename(json_file)}
 Documento: {os.path.basename(doc_file)}
 Cartella Input: {input_folder}
+Nome CSV Export: {self.input_folder_name}.csv
+
+METADATI HEADER:
+{metadata_info if metadata_info else "  Nessun metadato"}
+
 Categorie JSON: {len(self.all_categories)}
 Categorie Database: {db_categories_count}
 Documenti: {len(self.documentgroups)}
 Pagine totali: {self.documentloader.totalpages if self.documentloader else 0}
 
 LAYOUT A GRIGLIA MULTI-RIGA:
-✓ Adattamento automatico alla larghezza finestra
-✓ 2-6 miniature per riga (configurabile)
-✓ Altezza documento si adatta alle righe necessarie
-✓ Drag & drop compatibile con layout a griglia
-
 {grid_info}
 
-CONFIGURAZIONE DOCUMENTI:
-Cifre contatore: {self.config_manager.get('document_counter_digits', 4)}
-Font: {self.config_manager.get('document_font_name', 'Arial')} {self.config_manager.get('document_font_size', 10)}pt
-Allineamento: Sinistra
-Layout: Griglia multi-riga adattiva
-
-EXPORT CONFIGURATO:
+EXPORT:
 Formato: {format_display}
 Qualità JPEG: {self.config_manager.get('jpeg_quality', 95)}%
 File esistenti: {file_handling_display}
-Backup: {'Abilitato' if self.config_manager.get('create_backup_on_overwrite', False) else 'Disabilitato'}
+CSV: Generato automaticamente con metadati
 
-DATABASE CATEGORIE:
-• Database SQLite: {os.path.basename(DB_FILE)}
-• Categorie salvate: {db_categories_count}
-• Combobox modificabile nel pannello destro
-• Salvataggio automatico di nuove categorie
-
-GESTIONE FILE ESISTENTI (v3.3):
-• Auto-rinomina: documento.pdf → documento(1).pdf
-• Chiedi conferma: popup per sovrascrivere
-• Sovrascrivi sempre: backup opzionale
-• Sistema numerazione Windows-style
-
-OPERAZIONI DISPONIBILI:
-• Click su miniature: visualizza immagine
-• Drag miniature: riorganizza tra documenti (grid-compatible)
-• Click intestazioni: seleziona intero documento
-• Tasto destro su intestazioni: menu con categorie
-• Combobox categoria: modifica e salva nuove
-• Click su immagine centrale: zoom fit
-• Hover su elementi per feedback visivo
-• Export intelligente con gestione duplicati
-• Ridimensionamento finestra: layout griglia si adatta
-
-EXPORT:
-Nome base file: {self.current_document_name}
 Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         """
         
         self.update_instructions(instructions)
 
-    # Export functionality
     def complete_sequence_export(self):
-        """Export images to configured output folder"""
+        """Export images and CSV to configured output folder"""
         if not self.documentgroups:
             messagebox.showwarning("Attenzione", "Nessun documento caricato")
             return
@@ -783,10 +821,8 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         try:
             export_format = self.config_manager.get('export_format', 'JPEG')
             
-            # Create progress dialog
             progress_window, progress_var, _ = create_progress_dialog(self, f"Export in formato {export_format}...")
             
-            # Export using export manager
             def progress_callback(message):
                 progress_var.set(message)
                 progress_window.update()
@@ -795,36 +831,107 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                 output_folder, self.documentgroups, self.current_document_name, progress_callback
             )
             
+            progress_var.set("Generazione CSV...")
+            progress_window.update()
+            csv_filename = self.export_csv_metadata(output_folder, exported_files)
+            
             progress_window.destroy()
             
-            # Show summary
             summary_message = f"Export completato!\n\n"
             summary_message += f"Formato: {export_format}\n"
             summary_message += f"Cartella: {output_folder}\n"
-            summary_message += f"File creati: {len(exported_files)}\n"
+            summary_message += f"File immagini: {len(exported_files)}\n"
+            summary_message += f"File CSV: {csv_filename}\n"
             if export_format in ['PDF_MULTI', 'TIFF_MULTI']:
                 summary_message += f"Documenti processati: {len(self.documentgroups)}"
             
             messagebox.showinfo("Export Completato", summary_message)
             
-            # Update last folder
             self.config_manager.set('last_folder', output_folder)
             if self.config_manager.get('auto_save_changes', True):
                 self.save_config()
                 
-            self.debug_print(f"Exported {len(exported_files)} files to {output_folder} in format {export_format}")
+            self.debug_print(f"Exported {len(exported_files)} files and CSV to {output_folder}")
             
         except Exception as e:
             if 'progress_window' in locals():
                 progress_window.destroy()
             messagebox.showerror("Errore", f"Errore durante l'export: {str(e)}")
 
-    # Selection management
+    def export_csv_metadata(self, output_folder: str, exported_files: List[str]) -> str:
+        """Export CSV file with metadata - NUOVO"""
+        csv_filename = f"{self.input_folder_name}.csv"
+        csv_path = os.path.join(output_folder, csv_filename)
+        
+        delimiter = self.config_manager.get('csv_delimiter', ';')
+        
+        try:
+            with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+                writer = csv.writer(csvfile, delimiter=delimiter)
+                
+                writer.writerow([
+                    'Nome File',
+                    'Categoria',
+                    'NumeroProgetto',
+                    'Intestatario',
+                    'IndirizzoImmobile',
+                    'LavoroEseguito',
+                    'EstremiCatastali'
+                ])
+                
+                export_format = self.config_manager.get('export_format', 'JPEG')
+                
+                if export_format in ['PDF_MULTI', 'TIFF_MULTI']:
+                    for doc_index, group in enumerate(self.documentgroups, 1):
+                        if not group.thumbnails:
+                            continue
+                        
+                        safe_category = self.export_manager.sanitize_filename(group.categoryname)
+                        matching_files = [f for f in exported_files if f'_doc{doc_index:03d}_{safe_category}' in f]
+                        
+                        if matching_files:
+                            filename = matching_files[0]
+                        else:
+                            ext = '.pdf' if 'PDF' in export_format else '.tiff'
+                            filename = f"{self.current_document_name}_doc{doc_index:03d}_{safe_category}{ext}"
+                        
+                        writer.writerow([
+                            filename,
+                            group.categoryname,
+                            self.header_metadata['NumeroProgetto'],
+                            self.header_metadata['Intestatario'],
+                            self.header_metadata['IndirizzoImmobile'],
+                            self.header_metadata['LavoroEseguito'],
+                            self.header_metadata['EstremiCatastali']
+                        ])
+                else:
+                    file_index = 0
+                    for group in self.documentgroups:
+                        for thumbnail in group.thumbnails:
+                            if file_index < len(exported_files):
+                                filename = exported_files[file_index]
+                                writer.writerow([
+                                    filename,
+                                    group.categoryname,
+                                    self.header_metadata['NumeroProgetto'],
+                                    self.header_metadata['Intestatario'],
+                                    self.header_metadata['IndirizzoImmobile'],
+                                    self.header_metadata['LavoroEseguito'],
+                                    self.header_metadata['EstremiCatastali']
+                                ])
+                                file_index += 1
+            
+            self.debug_print(f"CSV exported: {csv_path}")
+            return csv_filename
+            
+        except Exception as e:
+            self.debug_print(f"Error exporting CSV: {e}")
+            raise
+
     def select_thumbnail(self, thumbnail: PageThumbnail):
         """Select a thumbnail and display its image"""
         self.debug_print(f"select_thumbnail called for page {thumbnail.pagenum}")
         
-        # Deselect previous thumbnail and group
         if self.selected_thumbnail:
             self.selected_thumbnail.deselect()
         if self.selected_group:
@@ -833,11 +940,9 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.selected_thumbnail = thumbnail
         self.selected_group = thumbnail.document_group
         
-        # Select new thumbnail and its group
         thumbnail.select()
         self.selected_group.select_group()
         
-        # Display the image
         self.debug_print(f"About to display image for page {thumbnail.pagenum}")
         
         try:
@@ -850,14 +955,12 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             print(f"[ERROR] Failed to display image: {e}")
             self.debug_print(f"Error displaying image: {e}")
         
-        # Update right panel
         self.category_var.set(thumbnail.categoryname)
         self.selection_info.config(text=f"Selezionata: Pagina {thumbnail.pagenum}")
         self.page_info_label.config(text=f"Documento: {thumbnail.categoryname}")
 
     def select_document_group(self, group: DocumentGroup):
         """Select an entire document group"""
-        # Deselect previous selections
         if self.selected_thumbnail:
             self.selected_thumbnail.deselect()
             self.selected_thumbnail = None
@@ -867,12 +970,10 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.selected_group = group
         group.select_group()
         
-        # Update right panel for group
         self.category_var.set(group.categoryname)
         self.selection_info.config(text=f"Selezionato: Documento")
         self.page_info_label.config(text=f"Documento: {group.categoryname} ({len(group.pages)} pagine)")
 
-    # Image display and zoom functionality
     def display_image(self, image: Image.Image):
         """Display image in center panel"""
         self.debug_print(f"display_image called with image: {image is not None}")
@@ -891,7 +992,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         
         self.debug_print(f"Image size: {image.size if image else 'None'}")
         
-        # Auto-fit the image
         if self.config_manager.get('auto_fit_images', True):
             self.after_idle(self.zoom_fit)
         else:
@@ -950,7 +1050,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
     def on_image_click(self, event):
         """Handle image click - click-to-fit"""
         if not self.zoom_area_mode and self.current_image:
-            # Single click on image = return to fit
             self.auto_fit_on_resize = True
             if self.config_manager.get('auto_fit_images', True):
                 self.zoom_fit()
@@ -979,7 +1078,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                 self.image_canvas.delete(self.zoom_rect_id)
                 self.zoom_rect_id = None
             
-            # Calculate zoom area
             x1, y1 = self.zoom_rect_start
             x2, y2 = self.zoom_rect_end
             if abs(x2-x1) > 10 and abs(y2-y1) > 10:
@@ -998,12 +1096,10 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         canvas_w = self.image_canvas.winfo_width()
         canvas_h = self.image_canvas.winfo_height()
         
-        # Calculate new zoom factor
         zoom_w = canvas_w / w
         zoom_h = canvas_h / h
         new_zoom = min(zoom_w, zoom_h) * self.zoom_factor
         
-        # Calculate new offset
         center_x = x + w/2
         center_y = y + h/2
         
@@ -1021,7 +1117,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         
         self.image_canvas.delete("all")
         
-        # Resize image
         img_w, img_h = self.current_image.size
         new_w = int(img_w * self.zoom_factor)
         new_h = int(img_h * self.zoom_factor)
@@ -1040,8 +1135,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                 self.image_canvas.create_image(x, y, image=self.photo)
             except Exception as e:
                 self.debug_print(f"Error updating image display: {e}")
-
-    # Drag and drop functionality - Enhanced for grid layout
     def create_drag_preview(self, thumbnail: PageThumbnail):
         """Create drag preview window"""
         self.drag_item = thumbnail
@@ -1071,7 +1164,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         target_group = self.get_group_at_position(x_root, y_root)
         
         if target_group and self.drag_item:
-            # Get original group
             original_group = None
             for group in self.documentgroups:
                 if self.drag_item in group.thumbnails:
@@ -1079,10 +1171,8 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                     break
             
             if original_group == target_group:
-                # Reorder within same group
                 self.reorder_within_group(self.drag_item, target_group, x_root, y_root)
             else:
-                # Move to different group
                 self.move_page_to_group(self.drag_item, target_group)
             
         self.drag_item = None
@@ -1105,25 +1195,20 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         """Reorder thumbnail within the same group - Enhanced for grid layout"""
         old_index = group.thumbnails.index(thumbnail)
         
-        # Use enhanced drop position calculation for grid
         new_index = self.calculate_grid_drop_position(group, x_root, y_root)
         
-        # Adjust new index if we're moving to the right
         if new_index > old_index:
             new_index -= 1
             
         if old_index == new_index:
             return
         
-        # Remove thumbnail from old position
         group.thumbnails.pop(old_index)
         group.pages.pop(old_index)
         
-        # Insert at new position
         group.thumbnails.insert(new_index, thumbnail)
         group.pages.insert(new_index, thumbnail.pagenum)
         
-        # Repack all thumbnails in grid
         group.repack_thumbnails_grid()
         
         self.debug_print(f"Reordered page {thumbnail.pagenum} in {group.categoryname} from {old_index} to {new_index}")
@@ -1142,11 +1227,9 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         thumb_height = self.config_manager.get('thumbnail_height', 100)
         padding = 6
         
-        # Calculate grid position
         col = max(0, relative_x // (thumb_width + padding))
-        row = max(0, relative_y // (thumb_height + 20 + padding))  # 20 for label height
+        row = max(0, relative_y // (thumb_height + 20 + padding))
         
-        # Convert grid position to list index
         thumbnails_per_row = group.thumbnails_per_row
         estimated_position = row * thumbnails_per_row + col
         
@@ -1154,7 +1237,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
 
     def move_page_to_group(self, thumbnail: PageThumbnail, target_group: DocumentGroup):
         """Move page to different group"""
-        # Find original group
         original_group = None
         for group in self.documentgroups:
             if thumbnail in group.thumbnails:
@@ -1164,16 +1246,12 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         if not original_group or original_group == target_group:
             return
 
-        # Remove from original group
         original_group.remove_thumbnail(thumbnail)
         
-        # Destroy old thumbnail frame
         thumbnail.frame.destroy()
         
-        # Create new thumbnail in target group
         new_thumbnail = target_group.add_page(thumbnail.pagenum, thumbnail.image)
         
-        # Select the new thumbnail if the old one was selected
         if self.selected_thumbnail == thumbnail:
             self.selected_thumbnail = new_thumbnail
             self.selected_group = target_group
@@ -1185,19 +1263,16 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
 
         self.debug_print(f"Moved page {thumbnail.pagenum} from {original_group.categoryname} to {target_group.categoryname}")
 
-    # Document context menu functionality
     def show_document_context_menu(self, document_group: DocumentGroup, event):
         """Show context menu for document group"""
         context_menu = tk.Menu(self, tearoff=0)
         
-        # Menu options
         context_menu.add_command(label="Nuovo documento prima", 
                                command=lambda: self.create_new_document(document_group, "before"))
         context_menu.add_command(label="Nuovo documento dopo", 
                                command=lambda: self.create_new_document(document_group, "after"))
         context_menu.add_separator()
         
-        # Only if document is empty
         if document_group.is_empty():
             context_menu.add_command(label="Elimina documento vuoto", 
                                    command=lambda: self.delete_empty_document(document_group))
@@ -1211,42 +1286,33 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
 
     def create_new_document(self, reference_document: DocumentGroup, position: str):
         """Create new document before or after reference document"""
-        # Get categories from JSON and database
         json_categories = list(self.all_categories)
         db_categories = self.category_db.get_all_categories()
         
-        # Show category selection dialog
         dialog = CategorySelectionDialog(self, json_categories, db_categories, 
                                        "Seleziona Categoria per Nuovo Documento")
         
         if dialog.result:
             selected_category = dialog.result
             
-            # Save category to database
             self.category_db.add_category(selected_category)
             
-            # Find reference document index
             ref_index = self.documentgroups.index(reference_document)
             
             if position == "after":
                 new_index = ref_index + 1
-            else:  # before
+            else:
                 new_index = ref_index
             
-            # Create new document
             new_counter = self.get_next_counter_for_position(new_index)
             new_group = DocumentGroup(self.content_frame, selected_category, self, new_counter)
             
-            # Insert in list
             self.documentgroups.insert(new_index, new_group)
             
-            # Renumber all documents
             self.renumber_documents()
             
-            # Reorganize UI
             self.repack_all_documents()
             
-            # Update categories if new
             if selected_category not in self.all_categories:
                 self.all_categories.add(selected_category)
                 self.update_category_combo()
@@ -1263,20 +1329,15 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         if messagebox.askyesno("Conferma Eliminazione", 
                              f"Eliminare il documento vuoto:\n{doc_name}?"):
             
-            # Remove from list
             if document_group in self.documentgroups:
                 self.documentgroups.remove(document_group)
             
-            # Destroy widget
             document_group.destroy()
             
-            # Renumber remaining documents
             self.renumber_documents()
             
-            # Reorganize UI
             self.repack_all_documents()
             
-            # Reset selections if necessary
             if self.selected_group == document_group:
                 self.selected_group = None
                 self.selected_thumbnail = None
@@ -1292,7 +1353,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         elif position >= len(self.documentgroups):
             return len(self.documentgroups) + 1
         else:
-            # Middle insertion, counter will be updated by renumbering
             return position + 1
 
     def renumber_documents(self):
@@ -1308,5 +1368,4 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         for group in self.documentgroups:
             group.pack(pady=5, fill="x", padx=5)
         
-        # Update scroll region after repacking
         self.after_idle(self.update_scroll_region)
