@@ -20,6 +20,7 @@ from gui.dialogs import CategorySelectionDialog, SettingsDialog
 from gui.components import DocumentGroup, PageThumbnail
 from utils import create_progress_dialog, show_help_dialog, show_about_dialog
 from config.constants import RESAMPLEFILTER
+from utils.branding import set_app_icon
 
 class AIDOXAApp(tk.Tk):
     """Main application window for DynamicAI with multi-row grid support and metadata"""
@@ -88,6 +89,8 @@ class AIDOXAApp(tk.Tk):
 
     def setup_window(self):
         """Setup main window properties"""
+
+        set_app_icon(self)
         self.title("DynamicAI - Editor Lineare Avanzato v3.4")
         
         # Set window geometry from config
@@ -99,7 +102,6 @@ class AIDOXAApp(tk.Tk):
         state = window_settings.get('state', 'normal')
         if state == 'zoomed':
             self.state('zoomed')
-
     def setup_ui(self):
         """Setup the user interface"""
         self.create_menu()
