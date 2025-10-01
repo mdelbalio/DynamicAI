@@ -89,7 +89,6 @@ class AIDOXAApp(tk.Tk):
 
     def setup_window(self):
         """Setup main window properties"""
-
         set_app_icon(self)
         self.title("DynamicAI - Editor Lineare Avanzato v3.4")
         
@@ -102,6 +101,7 @@ class AIDOXAApp(tk.Tk):
         state = window_settings.get('state', 'normal')
         if state == 'zoomed':
             self.state('zoomed')
+
     def setup_ui(self):
         """Setup the user interface"""
         self.create_menu()
@@ -916,9 +916,39 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             messagebox.showerror("Errore", f"Errore durante l'export: {str(e)}")
 
     def export_csv_metadata(self, output_folder: str, exported_files: List[str]) -> str:
-        """Export CSV file with metadata - NUOVO"""
+        """Export CSV file with metadata - respects file handling settings"""
         csv_filename = f"{self.input_folder_name}.csv"
         csv_path = os.path.join(output_folder, csv_filename)
+        
+        # Check if CSV already exists and handle according to settings
+        if os.path.exists(csv_path):
+            file_handling_mode = self.config_manager.get('file_handling_mode', 'auto_rename')
+            
+            if file_handling_mode == 'ask_overwrite':
+                # Ask user what to do
+                response = messagebox.askyesnocancel(
+                    "File CSV Esistente",
+                    f"Il file CSV '{csv_filename}' esiste già.\n\n"
+                    "Sì = Sovrascrivi\n"
+                    "No = Rinomina automaticamente\n"
+                    "Annulla = Salta creazione CSV"
+                )
+                
+                if response is None:  # Cancel
+                    self.debug_print("CSV export cancelled by user")
+                    return ""
+                elif response is False:  # No - rename
+                    csv_path = self._get_unique_csv_filename(output_folder, csv_filename)
+                    csv_filename = os.path.basename(csv_path)
+                # If Yes (True), keep original path and overwrite
+                
+            elif file_handling_mode == 'auto_rename':
+                # Auto rename to avoid overwriting
+                csv_path = self._get_unique_csv_filename(output_folder, csv_filename)
+                csv_filename = os.path.basename(csv_path)
+                self.debug_print(f"CSV renamed to: {csv_filename}")
+                
+            # else: 'always_overwrite' - do nothing, keep original path
         
         delimiter = self.config_manager.get('csv_delimiter', ';')
         
@@ -984,6 +1014,25 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         except Exception as e:
             self.debug_print(f"Error exporting CSV: {e}")
             raise
+
+    def _get_unique_csv_filename(self, folder: str, original_filename: str) -> str:
+        """Generate unique CSV filename by adding counter"""
+        base_name = os.path.splitext(original_filename)[0]
+        extension = os.path.splitext(original_filename)[1]
+        
+        counter = 1
+        new_path = os.path.join(folder, original_filename)
+        
+        while os.path.exists(new_path):
+            new_filename = f"{base_name}_{counter:03d}{extension}"
+            new_path = os.path.join(folder, new_filename)
+            counter += 1
+            
+            # Safety check to avoid infinite loop
+            if counter > 9999:
+                raise Exception("Troppi file CSV con lo stesso nome base")
+        
+        return new_path
 
     def select_thumbnail(self, thumbnail: PageThumbnail):
         """Select a thumbnail and display its image"""
