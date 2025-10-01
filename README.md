@@ -1,123 +1,182 @@
-# DynamicAI
+# DynamicAI (DocumentAI)
 
-Soluzione per gestire documenti da AICUBE per indicizzazione e separazione
+> Applicazione per la gestione, visualizzazione e processamento di documenti (PDF/TIFF) con struttura modulare e icone dedicate.
 
-# Per creare l-eseguibile Renamefile
+---
 
-py -m PyInstaller --onefile -w main.py
+## Struttura organizzativa
 
-# installazione pyPDF2
+- **main.py** – Entry point semplice e pulito  
+- **config/** – Gestione configurazione e costanti  
+- **database/** – Persistenza e gestione database SQLite  
+- **gui/dialogs/** – Finestre di dialogo (impostazioni, selezione categoria)  
+- **gui/components/** – Componenti UI riutilizzabili (miniature, gruppi documento)  
+- **loaders/** – Caricamento documenti PDF/TIFF  
+- **export/** – Gestione export in tutti i formati  
+- **gui/main_window.py** – Finestra principale semplificata  
+- **utils/** – Helper e funzioni di utilità  
+- **assets/icons/** – Icone dell’applicazione (runtime e build)
 
-py -m pip install PyPDF2 Pillow
+### Vantaggi principali
+- Ogni classe ha una responsabilità specifica
+- Facile manutenzione e debug
+- Componenti testabili indipendentemente
+- Aggiunta di nuove funzionalità più semplice
+- Codice più leggibile e organizzato
 
-# aggiunto unvisualizzatore pdf piú completo
+### Processo di migrazione consigliato
+1. Sposta le classi più indipendenti (**CategoryDatabase**, **DocumentLoaders**).  
+2. Migra i **dialoghi**.  
+3. Migra i **componenti UI**.  
+4. Refactor della **finestra principale**.  
 
-py -m pip install PyMuPDF Pillow
+Questa struttura mantiene tutte le funzionalità esistenti ma le organizza in modo più gestibile.
 
+---
 
-versione del sw con le miniature dei documenti, fatta con calude.ai (da sistemare)
+## Struttura completa dei file
 
-# dynamicAI.py
+### File principale
+- **main.py** – Entry point dell’applicazione
 
-Version del sw con le miniature dei documenti, fatta con Perplexity
+### Modulo `config`
+- **config/__init__.py** – Esporta `ConfigManager` e costanti  
+- **config/constants.py** – Costanti e configurazione default  
+- **config/settings.py** – Gestione configurazione e percorsi file
 
-# Struttura organizzativa:
+### Modulo `database`
+- **database/__init__.py** – Esporta `CategoryDatabase`  
+- **database/category_db.py** – Gestione database SQLite per categorie
 
-main.py - Entry point semplice e pulito
-config/ - Gestione configurazione e costanti
-database/ - Persistenza e gestione database SQLite
-gui/dialogs/ - Finestre di dialogo (impostazioni, selezione categoria)
-gui/components/ - Componenti UI riutilizzabili (miniature, gruppi documento)
-loaders/ - Caricamento documenti PDF/TIFF
-export/ - Gestione export in tutti i formati
-gui/main\_window.py - Finestra principale semplificata
+### Modulo `loaders`
+- **loaders/__init__.py** – Esporta `DocumentLoaders`  
+- **loaders/document_loaders.py** – Caricamento PDF e TIFF con factory function
 
-# vantaggi principali:
+### Modulo `export`
+- **export/__init__.py** – Esporta `ExportManager`  
+- **export/export_manager.py** – Gestione export in tutti i formati con file handling
 
-Ogni classe ha una responsabilità specifica
-Facile manutenzione e debug
-Componenti testabili indipendentemente
-Aggiunta nuove funzionalità più semplice
-Codice più leggibile e organizzato
+### Modulo GUI – dialoghi
+- **gui/dialogs/__init__.py** – Esporta dialoghi  
+- **gui/dialogs/category_dialog.py** – Dialogo selezione categoria con ricerca  
+- **gui/dialogs/settings_dialog.py** – Dialogo impostazioni completo con tabs
 
-# Processo di migrazione consigliato:
+### Modulo GUI – componenti
+- **gui/components/__init__.py** – Esporta componenti UI  
+- **gui/components/thumbnail.py** – Componente miniatura con drag&drop  
+- **gui/components/document_group.py** – Componente gruppo documento
 
-Inizia spostando le classi più indipendenti (CategoryDatabase, DocumentLoaders), poi i dialoghi, quindi i componenti UI, e infine refactorizza la finestra principale.
-Questa struttura mantiene tutte le funzionalità esistenti ma le organizza in modo molto più gestibile. Vuoi che ti aiuti a implementare una parte specifica, come la migrazione di una delle classi principali?
+### Modulo GUI – principale
+- **gui/__init__.py** – Esporta `AIDOXAApp`  
+- **gui/main_window.py** – Finestra principale  
+  - Parte 1: setup UI, menu, eventi  
+  - Parte 2: gestione documenti, zoom, drag&drop, context menu
 
-# Struttura completa dei file:
+### Modulo `utils`
+- **utils/__init__.py** – Esporta helper comuni  
+- **utils/helpers.py** – Funzioni di utilità (dialoghi progress, help, about, validazione)  
+- **utils/branding.py** – Helper per icone e path PyInstaller-safe  
+  - Funzione chiave:
+    ```python
+    from utils.branding import set_app_icon
+    # all'interno di setup_window / __init__ della finestra principale:
+    set_app_icon(self)  # usa assets/icons/documentai.png
+    ```
+  - Note: `resource_path()` gestisce correttamente l’accesso ai file sia in sviluppo che in bundle PyInstaller.
 
-# File principale:
+---
 
-main.py - Entry point dell'applicazione
+## Icone dell’applicazione
 
-# Modulo config:
+- **assets/icons/documentai.png** – Icona finestra (runtime Tkinter)  
+- **assets/icons/documentai.ico** – Icona eseguibile (PyInstaller / Windows)
 
-config/\_\_init\_\_.py - Esporta ConfigManager e costanti
-config/constants.py - Costanti e configurazione default
-config/settings.py - Gestione configurazione e percorsi file
+### Utilizzo a runtime (Tkinter)
+In `gui/main_window.py`:
+```python
+from utils.branding import set_app_icon
 
-# Modulo database:
+def setup_window(self):
+    # ...
+    set_app_icon(self)  # carica assets/icons/documentai.png
+    # ...
+```
 
-database/**\_\_init\_\_.py** - Esporta CategoryDatabase
-database/category\_db.py - Gestione database SQLite per categorie
+### Utilizzo in build (PyInstaller)
+Nel file `.spec` (es. `DynamicAI_with_icon.spec`):
+```python
+a = Analysis(
+    ['main.py'],
+    # ...
+    datas=[
+        ('assets/icons/documentai.png', 'assets/icons'),
+        ('assets/icons/documentai.ico', 'assets/icons'),
+    ],
+    # ...
+)
 
-# Modulo loaders:
+exe = EXE(
+    pyz,
+    a.scripts,
+    # ...
+    icon='assets/icons/documentai.ico',  # icona EXE su Windows
+)
+```
 
-loaders/**\_\_init\_\_.py** - Esporta DocumentLoaders
-loaders/document\_loaders.py - Caricamento PDF e TIFF con factory function
+Suggerimento: mantiene tutte le icone in `assets/icons/` per evitare path hardcoded e rendere il progetto portabile.
 
-# Modulo export:
+---
 
-export/**\_\_init\_\_.py** - Esporta ExportManager
-export/export\_manager.py - Gestione export in tutti i formati con file handling
+## Build & Run
 
-# Modulo GUI dialoghi:
+### Requisiti
+- **Python 3.10+** (consigliato)  
+- Dipendenze del progetto (installa con `pip`)
 
-gui/dialogs/**\_\_init\_\_.py** - Esporta dialoghi
-gui/dialogs/category\_dialog.py - Dialogo selezione categoria con ricerca
-gui/dialogs/settings\_dialog.py - Dialogo impostazioni completo con tabs
+### Setup ambiente (consigliato)
+```bash
+# Windows (PowerShell)
+py -3 -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 
-# Modulo GUI componenti:
+# macOS / Linux
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-gui/components/**\_\_init\_\_.py** - Esporta componenti UI
-gui/components/thumbnail.py - Componente miniatura con drag\&drop
-gui/components/document\_group.py - Componente gruppo documento
+> Se non hai un `requirements.txt`, installa i pacchetti necessari del progetto (esempio indicativo):  
+> `pip install pillow pypdf2 tk`
 
-# Modulo GUI principale:
+### Avvio da sorgente
+```bash
+python main.py
+```
 
-gui/**\_\_init\_\_.py** - Esporta AIDOXAApp
-gui/main\_window.py - Finestra principale (Parte 1: UI setup, menu, eventi)
-La Parte 2 include: gestione documenti, zoom, drag\&drop, context menu
+### Build eseguibile (Windows, PyInstaller)
+```bash
+pyinstaller DynamicAI_with_icon.spec
+# oppure: pyinstaller --noconfirm DynamicAI_with_icon.spec
+```
+L’eseguibile userà `assets/icons/documentai.ico` come icona.
 
-# Modulo utils:
+---
 
-utils/**\_\_init\_\_.py** - Esporta helper functions
-utils/helpers.py - Funzioni di utilità (dialoghi progress, help, about, validazione)
+## Note di manutenzione
+- Evita path hardcoded: usa `pathlib.Path` e funzioni helper.  
+- Nella UI **non** usare `time.sleep()` nel main thread (usa `after()` per non bloccare l’interfaccia).  
+- Per operazioni lunghe: thread + `queue` e aggiornamenti UI con `after()`.  
+- Limita `except:` e `except Exception`: preferisci eccezioni specifiche e logging strutturato.
 
-# Vantaggi della nuova struttura:
+---
 
-Separazione chiara delle responsabilità - Ogni modulo ha uno scopo specifico
-Facilità di manutenzione - Facile trovare e modificare funzionalità specifiche
-Riusabilità - I componenti possono essere riutilizzati in altri progetti
-Testing - Ogni modulo può essere testato indipendentemente
-Scalabilità - Semplice aggiungere nuove funzionalità
-Import puliti - Ogni modulo esporta solo ciò che serve
+## TODO / Roadmap (esempio)
+- [ ] Test unitari per i componenti dei loaders/export  
+- [ ] Migliorare gestione zoom/pan/scroll e comportamenti edge-case  
+- [ ] Logging centralizzato e livelli (info/warn/error)  
+- [ ] Profilazione performance su documenti molto grandi
 
-# Come procedere:
+---
 
-Copia tutti i file nelle rispettive directory
-Testa l'applicazione per verificare che tutto funzioni
-Migrazione graduale - Puoi tenere il file originale come backup
-Personalizzazioni - Modifica i singoli moduli secondo le tue esigenze
-
-La struttura mantiene tutte le funzionalità originali ma le organizza in modo molto più gestibile e professionale. Ogni file è autocontenuto con le sue responsabilità specifiche.Riprova
-
-# link swisstransfer per vedere la struttura dei files
-
-https://www.swisstransfer.com/d/4b315c3a-4b71-4e20-8455-0aaf7b7d7faa
-
-# 2\. Crea UN SOLO eseguibile - Risultato: dist/DynamicAI.exe
-
-pyinstaller --onefile --windowed --name DynamicAI main.py
-
+Se vuoi, posso aggiornare automaticamente lo `.spec`, patchare `main_window.py` con `set_app_icon(self)` (se non già fatto), e creare uno script “one‑click build” per Windows.
