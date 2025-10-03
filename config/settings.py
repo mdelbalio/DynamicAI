@@ -1,81 +1,113 @@
-"""
-Configuration management for DynamicAI
+r"""
+Configuration management for DynamicAI (patched, bbox-aware friendly)
+- Percorsi config/db in cartella utente quando possibile (Windows: %APPDATA%\DynamicAI)
+- Merge con DEFAULT_CONFIG (shallow + dict nested)
+- Salvataggio atomico
 """
 
 import os
 import sys
 import json
+from tempfile import NamedTemporaryFile
 from .constants import DEFAULT_CONFIG
 
+APP_NAME = "DynamicAI"
+
+def _user_config_dir() -> str:
+    """Restituisce la cartella di configurazione utente.
+    Windows: %APPDATA%\\DynamicAI
+    Linux/macOS: ~/.config/DynamicAI
+    Se non disponibile, fallback alla root progetto.
+    """
+    try:
+        if os.name == "nt":
+            base = os.getenv("APPDATA") or os.path.expanduser("~")
+            path = os.path.join(base, APP_NAME)
+        else:
+            base = os.path.join(os.path.expanduser("~"), ".config")
+            path = os.path.join(base, APP_NAME)
+        os.makedirs(path, exist_ok=True)
+        return path
+    except Exception:
+        # fallback root progetto
+        if getattr(sys, 'frozen', False):
+            return os.path.dirname(sys.executable)
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def get_config_file_path():
-    """Get the path to the configuration file"""
-    if getattr(sys, 'frozen', False):
-        # Se il programma è compilato (exe)
-        app_dir = os.path.dirname(sys.executable)
-    else:
-        # Se eseguito da script Python
-        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(app_dir, "DynamicAI_config.json")
+    """Path del file di configurazione JSON."""
+    return os.path.join(_user_config_dir(), f"{APP_NAME}_config.json")
 
 def get_db_file_path():
-    """Get the path to the database file"""
-    if getattr(sys, 'frozen', False):
-        app_dir = os.path.dirname(sys.executable)
-    else:
-        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(app_dir, "DynamicAI_categories.db")
+    """Path del file database SQLite (se usato)."""
+    return os.path.join(_user_config_dir(), f"{APP_NAME}_categories.db")
 
 CONFIG_FILE = get_config_file_path()
 DB_FILE = get_db_file_path()
 
 class ConfigManager:
-    """Manages application configuration"""
-    
+    """Gestisce la configurazione dell'applicazione."""
     def __init__(self):
         self.config_data = self.load_config()
-    
+
+    # ----------------
+    # Load / Save
+    # ----------------
     def load_config(self):
-        """Load configuration from JSON file"""
+        """Carica la configurazione dal file JSON, fondendola con DEFAULT_CONFIG."""
         try:
             if os.path.exists(CONFIG_FILE):
                 with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
                     config = json.load(f)
-                # Merge with default config to ensure all keys exist
-                merged_config = DEFAULT_CONFIG.copy()
+                # merge: copia defaults e poi overlay config con nested dict-merge
+                merged = DEFAULT_CONFIG.copy()
                 for key, value in config.items():
-                    if key in merged_config and isinstance(value, dict) and isinstance(merged_config[key], dict):
-                        merged_config[key].update(value)
+                    if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+                        merged[key] = {**merged[key], **value}
                     else:
-                        merged_config[key] = value
-                return merged_config
+                        merged[key] = value
+                return merged
             else:
                 self.save_config_data(DEFAULT_CONFIG)
                 return DEFAULT_CONFIG.copy()
         except Exception as e:
             print(f"Error loading config: {e}")
             return DEFAULT_CONFIG.copy()
-    
+
     def save_config_data(self, config_data):
-        """Save configuration data to JSON file"""
+        """Salva il JSON in modo atomico per evitare corruzione file."""
         try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(config_data, f, indent=4, ensure_ascii=False)
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+            with NamedTemporaryFile('w', delete=False, encoding='utf-8', dir=os.path.dirname(CONFIG_FILE), prefix='._tmp_', suffix='.json') as tmp:
+                json.dump(config_data, tmp, indent=4, ensure_ascii=False)
+                temp_name = tmp.name
+            # atomic replace
+            if os.name == "nt":
+                # su Windows, os.replace è atomic entro lo stesso volume
+                os.replace(temp_name, CONFIG_FILE)
+            else:
+                os.replace(temp_name, CONFIG_FILE)
             print(f"Configuration saved to: {CONFIG_FILE}")
         except Exception as e:
             print(f"Error saving config: {e}")
-    
+
     def save_config(self):
-        """Save current configuration to JSON file"""
         self.save_config_data(self.config_data)
-    
+
+    # ----------------
+    # Helpers
+    # ----------------
     def get(self, key, default=None):
-        """Get configuration value"""
         return self.config_data.get(key, default)
-    
+
     def set(self, key, value):
-        """Set configuration value"""
         self.config_data[key] = value
-    
-    def update(self, updates):
-        """Update multiple configuration values"""
-        self.config_data.update(updates)
+
+    def update(self, updates: dict):
+        if not isinstance(updates, dict):
+            return
+        for k, v in updates.items():
+            if isinstance(v, dict) and isinstance(self.config_data.get(k), dict):
+                self.config_data[k].update(v)
+            else:
+                self.config_data[k] = v

@@ -1,412 +1,479 @@
 """
-Settings dialog for DynamicAI configuration
+Settings Dialog for DynamicAI v3.6 (BATCH EDITION)
+Aggiunte:
+- Tab "Percorsi" con gestione JSON separato
+- Tab "CSV" per modalità incremental/per_file
+- Tab "Batch" per abilitazione batch manager
 """
 
+import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from typing import Optional, Dict
 
 class SettingsDialog:
-    """Dialog for application settings and preferences"""
+    """Dialog per configurazione applicazione"""
     
-    def __init__(self, parent: tk.Widget, config_data: Dict):
+    def __init__(self, parent, config_manager):
         self.parent = parent
-        self.config_data = config_data.copy()
-        self.result: Optional[Dict] = None
+        self.config_manager = config_manager
+        self.result = None
         
+        # Create dialog
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Impostazioni DynamicAI")
-        self.dialog.geometry("700x750")
+        self.dialog.geometry("700x600")
         self.dialog.transient(parent)
         self.dialog.grab_set()
         
-        # Center the dialog
-        self.dialog.geometry("+%d+%d" % (parent.winfo_rootx() + 50, parent.winfo_rooty() + 50))
-        
-        self.create_widgets()
-        self.dialog.wait_window()
-
-    def create_widgets(self):
-        """Create settings dialog widgets"""
-        main_frame = tk.Frame(self.dialog, padx=20, pady=20)
-        main_frame.pack(fill="both", expand=True)
-        
-        # Title
-        title = tk.Label(main_frame, text="Impostazioni DynamicAI Editor", 
-                        font=("Arial", 14, "bold"), fg="darkblue")
-        title.pack(pady=(0, 20))
-        
-        # Create notebook for tabbed interface
-        notebook = ttk.Notebook(main_frame)
-        notebook.pack(fill="both", expand=True, pady=(0, 20))
+        # Create notebook
+        self.notebook = ttk.Notebook(self.dialog)
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
         
         # Create tabs
-        self.create_paths_tab(notebook)
-        self.create_documents_tab(notebook)
-        self.create_export_tab(notebook)
-        self.create_interface_tab(notebook)
-        
-        # Info frame
-        self.create_info_frame(main_frame)
+        self.create_paths_tab()
+        self.create_fonts_tab()
+        self.create_thumbnails_tab()
+        self.create_export_tab()
+        self.create_csv_tab()
+        self.create_batch_tab()
+        self.create_advanced_tab()
         
         # Buttons
-        self.create_buttons(main_frame)
+        self.create_buttons()
         
-        # Update initial preview
-        self.update_font_preview()
-
-    def create_paths_tab(self, notebook):
-        """Create paths configuration tab"""
-        paths_frame = ttk.Frame(notebook)
-        notebook.add(paths_frame, text="Percorsi")
+    def create_paths_tab(self):
+        """Tab percorsi input/output e JSON"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Percorsi")
         
         # Input folder
-        input_frame = tk.LabelFrame(paths_frame, text="Cartella Input Predefinita", 
-                                   font=("Arial", 10, "bold"))
-        input_frame.pack(fill="x", padx=10, pady=10)
-        
-        self.input_folder_var = tk.StringVar(value=self.config_data.get('default_input_folder', ''))
-        input_entry_frame = tk.Frame(input_frame)
-        input_entry_frame.pack(fill="x", padx=10, pady=10)
-        
-        tk.Entry(input_entry_frame, textvariable=self.input_folder_var, 
-                font=("Arial", 9), width=50).pack(side="left", fill="x", expand=True)
-        tk.Button(input_entry_frame, text="Sfoglia", 
-                 command=self.browse_input_folder, bg="lightblue").pack(side="right", padx=(5, 0))
+        self.create_folder_setting(frame, "Cartella Input Documenti:",
+                                   'default_input_folder', 0)
         
         # Output folder
-        output_frame = tk.LabelFrame(paths_frame, text="Cartella Output Predefinita", 
-                                    font=("Arial", 10, "bold"))
-        output_frame.pack(fill="x", padx=10, pady=10)
+        self.create_folder_setting(frame, "Cartella Output Documenti:",
+                                   'default_output_folder', 1)
         
-        self.output_folder_var = tk.StringVar(value=self.config_data.get('default_output_folder', ''))
-        output_entry_frame = tk.Frame(output_frame)
-        output_entry_frame.pack(fill="x", padx=10, pady=10)
+        # Separator
+        ttk.Separator(frame, orient="horizontal").grid(row=2, column=0, columnspan=3,
+                                                       sticky="ew", pady=20, padx=10)
         
-        tk.Entry(output_entry_frame, textvariable=self.output_folder_var, 
-                font=("Arial", 9), width=50).pack(side="left", fill="x", expand=True)
-        tk.Button(output_entry_frame, text="Sfoglia", 
-                 command=self.browse_output_folder, bg="lightblue").pack(side="right", padx=(5, 0))
+        # JSON settings
+        tk.Label(frame, text="Gestione File JSON:", font=("Arial", 10, "bold")).grid(
+            row=3, column=0, columnspan=3, sticky="w", padx=10, pady=(10, 5))
+        
+        # Use input folder for JSON checkbox
+        self.use_input_json_var = tk.BooleanVar(
+            value=self.config_manager.config_data.get('use_input_folder_for_json', True))
+        ttk.Checkbutton(frame, text="Usa stessa cartella dei documenti per file JSON",
+                       variable=self.use_input_json_var,
+                       command=self.toggle_json_folder).grid(
+            row=4, column=0, columnspan=3, sticky="w", padx=20, pady=5)
+        
+        # JSON folder (conditional)
+        self.json_folder_label = tk.Label(frame, text="Cartella JSON Separata:")
+        self.json_folder_label.grid(row=5, column=0, sticky="w", padx=20, pady=5)
+        
+        self.json_folder_var = tk.StringVar(
+            value=self.config_manager.config_data.get('json_input_path', ''))
+        self.json_folder_entry = tk.Entry(frame, textvariable=self.json_folder_var, width=40)
+        self.json_folder_entry.grid(row=5, column=1, sticky="ew", padx=5)
+        
+        self.json_folder_btn = tk.Button(frame, text="Sfoglia",
+                                        command=lambda: self.browse_folder('json_input_path'))
+        self.json_folder_btn.grid(row=5, column=2, padx=5)
+        
+        # Initial state
+        self.toggle_json_folder()
+        
+        # Grid weights
+        frame.columnconfigure(1, weight=1)
+        
+    def create_folder_setting(self, parent, label_text, config_key, row):
+        """Helper to create folder setting row"""
+        tk.Label(parent, text=label_text, font=("Arial", 9)).grid(
+            row=row, column=0, sticky="w", padx=10, pady=10)
+        
+        var = tk.StringVar(value=self.config_manager.config_data.get(config_key, ''))
+        setattr(self, f"{config_key}_var", var)
+        
+        entry = tk.Entry(parent, textvariable=var, width=40)
+        entry.grid(row=row, column=1, sticky="ew", padx=5)
+        
+        btn = tk.Button(parent, text="Sfoglia",
+                       command=lambda k=config_key: self.browse_folder(k))
+        btn.grid(row=row, column=2, padx=5)
+        
+    def toggle_json_folder(self):
+        """Toggle JSON folder entry based on checkbox"""
+        if self.use_input_json_var.get():
+            self.json_folder_label.config(state="disabled")
+            self.json_folder_entry.config(state="disabled")
+            self.json_folder_btn.config(state="disabled")
+        else:
+            self.json_folder_label.config(state="normal")
+            self.json_folder_entry.config(state="normal")
+            self.json_folder_btn.config(state="normal")
+            
+    def create_fonts_tab(self):
+        """Tab font documenti"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Font")
+        
+        tk.Label(frame, text="Font Intestazione Documenti:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=10)
+        
+        # Font family
+        font_frame = tk.Frame(frame)
+        font_frame.pack(fill="x", padx=20, pady=5)
+        
+        tk.Label(font_frame, text="Nome Font:").pack(side="left")
+        self.font_name_var = tk.StringVar(
+            value=self.config_manager.config_data['fonts'].get('document_font_name', 'Arial'))
+        fonts_available = ['Arial', 'Helvetica', 'Times New Roman', 'Courier New', 'Verdana']
+        ttk.Combobox(font_frame, textvariable=self.font_name_var,
+                    values=fonts_available, width=20).pack(side="left", padx=5)
+        
+        # Font size
+        size_frame = tk.Frame(frame)
+        size_frame.pack(fill="x", padx=20, pady=5)
+        
+        tk.Label(size_frame, text="Dimensione:").pack(side="left")
+        self.font_size_var = tk.IntVar(
+            value=self.config_manager.config_data['fonts'].get('document_font_size', 10))
+        tk.Spinbox(size_frame, from_=8, to=16, textvariable=self.font_size_var,
+                  width=5).pack(side="left", padx=5)
+        
+        # Font bold
+        self.font_bold_var = tk.BooleanVar(
+            value=self.config_manager.config_data['fonts'].get('document_font_bold', True))
+        ttk.Checkbutton(frame, text="Grassetto", variable=self.font_bold_var).pack(
+            anchor="w", padx=20, pady=10)
+        
+    def create_thumbnails_tab(self):
+        """Tab thumbnails"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Miniature")
+        
+        tk.Label(frame, text="Dimensioni Miniature:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=10)
+        
+        # Width
+        width_frame = tk.Frame(frame)
+        width_frame.pack(fill="x", padx=20, pady=5)
 
-    def create_documents_tab(self, notebook):
-        """Create documents configuration tab"""
-        doc_frame = ttk.Frame(notebook)
-        notebook.add(doc_frame, text="Documenti")
-        
-        # Document counter settings
-        counter_frame = tk.LabelFrame(doc_frame, text="Contatore Documenti", 
-                                     font=("Arial", 10, "bold"))
-        counter_frame.pack(fill="x", padx=10, pady=10)
-        
-        counter_digits_frame = tk.Frame(counter_frame)
-        counter_digits_frame.pack(padx=10, pady=10)
-        
-        tk.Label(counter_digits_frame, text="Numero minimo di cifre:", font=("Arial", 9)).pack(side="left")
-        self.counter_digits_var = tk.IntVar(value=self.config_data.get('document_counter_digits', 4))
-        tk.Spinbox(counter_digits_frame, from_=1, to=6, width=5, 
-                  textvariable=self.counter_digits_var).pack(side="left", padx=(5, 0))
-        
-        # Font settings
-        font_frame = tk.LabelFrame(doc_frame, text="Impostazioni Font", 
-                                  font=("Arial", 10, "bold"))
-        font_frame.pack(fill="x", padx=10, pady=10)
-        
-        self.create_font_settings(font_frame)
-        self.create_font_preview(font_frame)
+        tk.Label(width_frame, text="Larghezza:").pack(side="left")
+        self.thumb_width_var = tk.IntVar(
+            value=self.config_manager.get('thumbnail_width', 80))
+        self.width_spinbox = tk.Spinbox(width_frame, from_=60, to=200, 
+                                        textvariable=self.thumb_width_var,
+                                        width=8, command=self.on_width_changed)
+        self.width_spinbox.pack(side="left", padx=5)
+        tk.Label(width_frame, text="px").pack(side="left")
 
-    def create_font_settings(self, parent):
-        """Create font configuration widgets"""
-        font_name_frame = tk.Frame(parent)
-        font_name_frame.pack(fill="x", padx=10, pady=5)
-        
-        tk.Label(font_name_frame, text="Font:", font=("Arial", 9)).pack(side="left")
-        self.font_name_var = tk.StringVar(value=self.config_data.get('document_font_name', 'Arial'))
-        font_combo = ttk.Combobox(font_name_frame, textvariable=self.font_name_var, 
-                                 values=['Arial', 'Times New Roman', 'Helvetica', 'Courier New', 'Verdana'],
-                                 width=15)
-        font_combo.pack(side="left", padx=(5, 15))
-        
-        tk.Label(font_name_frame, text="Dimensione:", font=("Arial", 9)).pack(side="left")
-        self.font_size_var = tk.IntVar(value=self.config_data.get('document_font_size', 10))
-        tk.Spinbox(font_name_frame, from_=6, to=16, width=5, 
-                  textvariable=self.font_size_var).pack(side="left", padx=(5, 0))
-        
-        # Font style
-        font_style_frame = tk.Frame(parent)
-        font_style_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.font_bold_var = tk.BooleanVar(value=self.config_data.get('document_font_bold', True))
-        tk.Checkbutton(font_style_frame, text="Grassetto", 
-                      variable=self.font_bold_var, font=("Arial", 9)).pack(side="left")
+        # Height
+        height_frame = tk.Frame(frame)
+        height_frame.pack(fill="x", padx=20, pady=5)
 
-    def create_font_preview(self, parent):
-        """Create font preview widget"""
-        preview_frame = tk.Frame(parent)
-        preview_frame.pack(fill="x", padx=10, pady=10)
-        
-        tk.Label(preview_frame, text="Anteprima:", font=("Arial", 9)).pack(anchor="w")
-        self.font_preview = tk.Label(preview_frame, text="0001 Categoria Documento", 
-                                    bg="white", relief="sunken", bd=1, padx=10, pady=5,
-                                    anchor="w", justify="left")
-        self.font_preview.pack(fill="x", pady=(5, 0))
-        
-        # Bind events to update preview
-        self.font_name_var.trace('w', self.update_font_preview)
-        self.font_size_var.trace('w', self.update_font_preview)
-        self.font_bold_var.trace('w', self.update_font_preview)
-        self.counter_digits_var.trace('w', self.update_font_preview)
+        tk.Label(height_frame, text="Altezza:").pack(side="left")
+        self.thumb_height_var = tk.IntVar(
+            value=self.config_manager.get('thumbnail_height', 100))
+        self.height_spinbox = tk.Spinbox(height_frame, from_=80, to=250, 
+                                        textvariable=self.thumb_height_var,
+                                        width=8)
+        self.height_spinbox.pack(side="left", padx=5)
+        tk.Label(height_frame, text="px").pack(side="left")
 
-    def create_export_tab(self, notebook):
-        """Create export configuration tab"""
-        save_frame = ttk.Frame(notebook)
-        notebook.add(save_frame, text="Export")
+        # Keep aspect ratio checkbox
+        self.keep_aspect_var = tk.BooleanVar(
+            value=self.config_manager.get('thumbnail_keep_aspect_ratio', False))
+        ttk.Checkbutton(frame, text="Mantieni proporzioni (rapporto larghezza/altezza)",
+                    variable=self.keep_aspect_var).pack(anchor="w", padx=20, pady=10)
         
-        # Export format settings
-        export_format_frame = tk.LabelFrame(save_frame, text="Formato Export", 
-                                          font=("Arial", 10, "bold"))
-        export_format_frame.pack(fill="x", padx=10, pady=5)
+    def create_export_tab(self):
+        """Tab export"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Export")
         
-        self.export_format_var = tk.StringVar(value=self.config_data.get('export_format', 'JPEG'))
-        format_options = [
-            ('JPEG (Pagina singola)', 'JPEG'),
-            ('PDF (Pagina singola)', 'PDF_SINGLE'),
-            ('PDF (Multi-pagina per documento)', 'PDF_MULTI'),
-            ('TIFF (Pagina singola)', 'TIFF_SINGLE'),
-            ('TIFF (Multi-pagina per documento)', 'TIFF_MULTI')
+        # Format
+        tk.Label(frame, text="Formato Export:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=10)
+        
+        self.export_format_var = tk.StringVar(
+            value=self.config_manager.config_data.get('export_format', 'JPEG'))
+        
+        formats = [
+            ('JPEG (file singoli)', 'JPEG'),
+            ('PDF Singolo (file per pagina)', 'PDF_SINGLE'),
+            ('PDF Multi-pagina (file per documento)', 'PDF_MULTI'),
+            ('TIFF Singolo (file per pagina)', 'TIFF_SINGLE'),
+            ('TIFF Multi-pagina (file per documento)', 'TIFF_MULTI')
         ]
         
-        for text, value in format_options:
-            tk.Radiobutton(export_format_frame, text=text, variable=self.export_format_var, 
-                          value=value, font=("Arial", 8)).pack(anchor="w", padx=10, pady=1)
+        for text, value in formats:
+            ttk.Radiobutton(frame, text=text, variable=self.export_format_var,
+                           value=value).pack(anchor="w", padx=20, pady=2)
         
-        # Quality settings for JPEG
-        quality_frame = tk.LabelFrame(save_frame, text="Qualità JPEG", 
-                                     font=("Arial", 10, "bold"))
-        quality_frame.pack(fill="x", padx=10, pady=5)
+        # JPEG quality
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=15, padx=10)
         
-        quality_control_frame = tk.Frame(quality_frame)
-        quality_control_frame.pack(padx=10, pady=5)
+        tk.Label(frame, text="Qualità JPEG:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
         
-        tk.Label(quality_control_frame, text="Qualità (1-100):", font=("Arial", 9)).pack(side="left")
-        self.jpeg_quality_var = tk.IntVar(value=self.config_data.get('jpeg_quality', 95))
-        tk.Spinbox(quality_control_frame, from_=1, to=100, width=5, 
-                  textvariable=self.jpeg_quality_var).pack(side="left", padx=(5, 0))
+        quality_frame = tk.Frame(frame)
+        quality_frame.pack(fill="x", padx=20, pady=5)
         
-        # NUOVO: CSV Settings
-        csv_frame = tk.LabelFrame(save_frame, text="Impostazioni CSV", 
-                                 font=("Arial", 10, "bold"))
-        csv_frame.pack(fill="x", padx=10, pady=5)
+        self.jpeg_quality_var = tk.IntVar(
+            value=self.config_manager.config_data.get('jpeg_quality', 95))
         
-        csv_delimiter_frame = tk.Frame(csv_frame)
-        csv_delimiter_frame.pack(padx=10, pady=5)
+        tk.Scale(quality_frame, from_=50, to=100, orient="horizontal",
+                variable=self.jpeg_quality_var, length=300).pack(side="left")
+        tk.Label(quality_frame, textvariable=self.jpeg_quality_var).pack(side="left", padx=5)
+        tk.Label(quality_frame, text="%").pack(side="left")
         
-        tk.Label(csv_delimiter_frame, text="Delimitatore CSV:", font=("Arial", 9)).pack(side="left")
-        self.csv_delimiter_var = tk.StringVar(value=self.config_data.get('csv_delimiter', ';'))
-        csv_combo = ttk.Combobox(csv_delimiter_frame, textvariable=self.csv_delimiter_var, 
-                                values=[';', ',', '\t', '|'], width=5, state="readonly")
-        csv_combo.pack(side="left", padx=(5, 0))
+        # File handling
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=15, padx=10)
         
-        tk.Label(csv_frame, text="Il CSV conterrà tutti i metadati per ogni file esportato", 
-                font=("Arial", 8), fg="gray").pack(anchor="w", padx=10, pady=(0, 5))
+        tk.Label(frame, text="Gestione File Esistenti:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
         
-        # GESTIONE FILE ESISTENTI
-        save_options_frame = tk.LabelFrame(save_frame, text="Gestione File Esistenti", 
-                                          font=("Arial", 10, "bold"))
-        save_options_frame.pack(fill="x", padx=10, pady=5)
+        self.file_handling_var = tk.StringVar(
+            value=self.config_manager.config_data.get('file_handling_mode', 'auto_rename'))
         
-        # Radio buttons per modalità gestione file
-        self.file_handling_var = tk.StringVar(value=self.config_data.get('file_handling_mode', 'auto_rename'))
+        ttk.Radiobutton(frame, text="Rinomina automaticamente (file(1).pdf)",
+                       variable=self.file_handling_var,
+                       value='auto_rename').pack(anchor="w", padx=20, pady=2)
+        ttk.Radiobutton(frame, text="Chiedi conferma",
+                       variable=self.file_handling_var,
+                       value='ask_overwrite').pack(anchor="w", padx=20, pady=2)
+        ttk.Radiobutton(frame, text="Sovrascrivi sempre",
+                       variable=self.file_handling_var,
+                       value='always_overwrite').pack(anchor="w", padx=20, pady=2)
         
-        tk.Label(save_options_frame, text="Quando un file esiste già:", 
-                font=("Arial", 9, "bold")).pack(anchor="w", padx=10, pady=(5, 3))
+    def create_csv_tab(self):
+        """Tab CSV (NUOVO)"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="CSV")
         
-        tk.Radiobutton(save_options_frame, text="Rinomina automaticamente (es: file(1).pdf, file(2).pdf)", 
-                      variable=self.file_handling_var, value="auto_rename", 
-                      font=("Arial", 8)).pack(anchor="w", padx=20, pady=1)
+        tk.Label(frame, text="Modalità Export CSV:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=10)
         
-        tk.Radiobutton(save_options_frame, text="Chiedi conferma prima di sovrascrivere", 
-                      variable=self.file_handling_var, value="ask_overwrite", 
-                      font=("Arial", 8)).pack(anchor="w", padx=20, pady=1)
+        # CSV mode
+        self.csv_mode_var = tk.StringVar(
+            value=self.config_manager.config_data.get('csv_mode', 'incremental'))
         
-        tk.Radiobutton(save_options_frame, text="Sovrascrivi sempre senza chiedere", 
-                      variable=self.file_handling_var, value="always_overwrite", 
-                      font=("Arial", 8)).pack(anchor="w", padx=20, pady=1)
+        ttk.Radiobutton(frame, text="Incrementale (unico metadata.csv con tutti i documenti)",
+                       variable=self.csv_mode_var,
+                       value='incremental').pack(anchor="w", padx=20, pady=5)
         
-        # Frame per opzioni backup
-        backup_frame = tk.Frame(save_options_frame)
-        backup_frame.pack(fill="x", padx=10, pady=(5, 3))
+        ttk.Radiobutton(frame, text="Per File (un CSV separato per ogni documento)",
+                       variable=self.csv_mode_var,
+                       value='per_file').pack(anchor="w", padx=20, pady=5)
         
-        self.create_backup_var = tk.BooleanVar(value=self.config_data.get('create_backup_on_overwrite', False))
-        self.backup_checkbox = tk.Checkbutton(backup_frame, text="Crea backup (.backup) quando sovrascrivi", 
-                                            variable=self.create_backup_var, font=("Arial", 8))
-        self.backup_checkbox.pack(anchor="w")
+        # CSV delimiter
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=15, padx=10)
         
-        # Abilita/disabilita backup checkbox in base alla selezione
-        def on_file_handling_change():
-            if self.file_handling_var.get() in ["ask_overwrite", "always_overwrite"]:
-                self.backup_checkbox.config(state="normal")
-            else:
-                self.backup_checkbox.config(state="disabled")
+        tk.Label(frame, text="Delimitatore CSV:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
         
-        self.file_handling_var.trace('w', lambda *args: on_file_handling_change())
-        on_file_handling_change()
+        delim_frame = tk.Frame(frame)
+        delim_frame.pack(fill="x", padx=20, pady=5)
         
-        # Auto save checkbox
-        self.auto_save_var = tk.BooleanVar(value=self.config_data.get('auto_save_changes', True))
-        tk.Checkbutton(save_options_frame, text="Salva automaticamente le modifiche alla configurazione", 
-                      variable=self.auto_save_var, font=("Arial", 8)).pack(anchor="w", padx=10, pady=3)
+        tk.Label(delim_frame, text="Carattere:").pack(side="left")
+        self.csv_delimiter_var = tk.StringVar(
+            value=self.config_manager.config_data.get('csv_delimiter', ';'))
+        
+        delimiters = [
+            ('Punto e virgola (;)', ';'),
+            ('Virgola (,)', ','),
+            ('Tab', '\t'),
+            ('Pipe (|)', '|')
+        ]
+        
+        for text, value in delimiters:
+            ttk.Radiobutton(delim_frame, text=text, variable=self.csv_delimiter_var,
+                           value=value).pack(anchor="w", padx=10, pady=2)
+        
+        # CSV output folder
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=15, padx=10)
+        
+        tk.Label(frame, text="Cartella Output CSV (opzionale):",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
+        
+        tk.Label(frame, text="Lascia vuoto per usare la stessa cartella output documenti",
+                font=("Arial", 8), fg="gray").pack(anchor="w", padx=20, pady=2)
+        
+        csv_folder_frame = tk.Frame(frame)
+        csv_folder_frame.pack(fill="x", padx=20, pady=5)
+        
+        self.csv_output_var = tk.StringVar(
+            value=self.config_manager.config_data.get('csv_output_path', ''))
+        tk.Entry(csv_folder_frame, textvariable=self.csv_output_var,
+                width=40).pack(side="left", fill="x", expand=True)
+        tk.Button(csv_folder_frame, text="Sfoglia",
+                 command=lambda: self.browse_folder('csv_output_path')).pack(
+            side="right", padx=(5, 0))
+        
+    def create_batch_tab(self):
+        """Tab Batch (NUOVO)"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Batch")
+        
+        tk.Label(frame, text="Gestione Batch:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=10)
+        
+        self.batch_enabled_var = tk.BooleanVar(
+            value=self.config_manager.config_data.get('batch_mode_enabled', True))
+        
+        ttk.Checkbutton(frame, text="Abilita Batch Manager (elaborazione multipla documenti)",
+                       variable=self.batch_enabled_var).pack(anchor="w", padx=20, pady=10)
+        
+        # Info
+        info_frame = tk.LabelFrame(frame, text="Informazioni Batch", padx=10, pady=10)
+        info_frame.pack(fill="x", padx=20, pady=20)
+        
+        info_text = """Il Batch Manager permette di elaborare multipli documenti in sequenza:
 
-    def create_interface_tab(self, notebook):
-        """Create interface configuration tab"""
-        ui_frame = ttk.Frame(notebook)
-        notebook.add(ui_frame, text="Interfaccia")
-        
-        # Layout settings
-        layout_frame = tk.LabelFrame(ui_frame, text="Layout e Finestre", 
-                                    font=("Arial", 10, "bold"))
-        layout_frame.pack(fill="x", padx=10, pady=10)
-        
-        self.save_layout_var = tk.BooleanVar(value=self.config_data.get('save_window_layout', True))
-        tk.Checkbutton(layout_frame, text="Salva posizione finestre e pannelli", 
-                      variable=self.save_layout_var, font=("Arial", 9)).pack(anchor="w", padx=10, pady=3)
-        
-        self.auto_fit_var = tk.BooleanVar(value=self.config_data.get('auto_fit_images', True))
-        tk.Checkbutton(layout_frame, text="Adatta automaticamente immagini alla finestra", 
-                      variable=self.auto_fit_var, font=("Arial", 9)).pack(anchor="w", padx=10, pady=3)
-        
-        self.show_debug_var = tk.BooleanVar(value=self.config_data.get('show_debug_info', False))
-        tk.Checkbutton(layout_frame, text="Mostra informazioni di debug nella console", 
-                      variable=self.show_debug_var, font=("Arial", 9)).pack(anchor="w", padx=10, pady=3)
-        
-        # Thumbnail size settings
-        thumb_frame = tk.LabelFrame(ui_frame, text="Dimensione Miniature", 
-                                   font=("Arial", 10, "bold"))
-        thumb_frame.pack(fill="x", padx=10, pady=10)
-        
-        thumb_size_frame = tk.Frame(thumb_frame)
-        thumb_size_frame.pack(padx=10, pady=10)
-        
-        tk.Label(thumb_size_frame, text="Larghezza:", font=("Arial", 9)).pack(side="left")
-        self.thumb_width_var = tk.IntVar(value=self.config_data.get('thumbnail_width', 80))
-        tk.Spinbox(thumb_size_frame, from_=60, to=150, width=5, 
-                  textvariable=self.thumb_width_var).pack(side="left", padx=(5, 15))
-        
-        tk.Label(thumb_size_frame, text="Altezza:", font=("Arial", 9)).pack(side="left")
-        self.thumb_height_var = tk.IntVar(value=self.config_data.get('thumbnail_height', 100))
-        tk.Spinbox(thumb_size_frame, from_=80, to=200, width=5, 
-                  textvariable=self.thumb_height_var).pack(side="left", padx=(5, 0))
+- Seleziona una cartella contenente PDF/TIFF + JSON
+- Il sistema rileva automaticamente le coppie documento-metadati
+- Elabora documenti uno alla volta in sequenza
+- Export finale CSV con tutti i metadati (modalità configurabile)
 
-    def create_info_frame(self, parent):
-        """Create info frame with file paths"""
-        from config.settings import CONFIG_FILE, DB_FILE
+Workflow supportati:
+- JSON con "categories": split documento in categorie
+- JSON flat metadati: documento unico con metadati tabellari"""
         
-        info_frame = tk.Frame(parent)
-        info_frame.pack(fill="x", pady=(5, 0))
+        tk.Label(info_frame, text=info_text, justify="left",
+                font=("Arial", 9)).pack(anchor="w")
         
-        info_text = tk.Label(info_frame, 
-                            text=f"File configurazione: {CONFIG_FILE.split('/')[-1]}", 
-                            font=("Arial", 7), fg="gray")
-        info_text.pack()
+    def create_advanced_tab(self):
+        """Tab avanzate"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Avanzate")
         
-        db_info_text = tk.Label(info_frame, 
-                               text=f"Database categorie: {DB_FILE.split('/')[-1]}", 
-                               font=("Arial", 7), fg="gray")
-        db_info_text.pack()
-
-    def create_buttons(self, parent):
-        """Create dialog buttons"""
-        button_frame = tk.Frame(parent, bg="lightgray", relief="raised", bd=1)
-        button_frame.pack(fill="x", side="bottom", pady=(10, 0))
+        # Auto-save
+        self.auto_save_var = tk.BooleanVar(
+            value=self.config_manager.config_data.get('auto_save_changes', True))
+        ttk.Checkbutton(frame, text="Salvataggio automatico modifiche",
+                       variable=self.auto_save_var).pack(anchor="w", padx=20, pady=10)
         
-        tk.Button(button_frame, text="Ripristina Default", command=self.reset_defaults, 
-                 bg="orange", font=("Arial", 9), width=15).pack(side="left", padx=10, pady=5)
+        # Save layout
+        self.save_layout_var = tk.BooleanVar(
+            value=self.config_manager.config_data.get('save_window_layout', True))
+        ttk.Checkbutton(frame, text="Salva layout finestra",
+                       variable=self.save_layout_var).pack(anchor="w", padx=20, pady=5)
         
-        tk.Button(button_frame, text="Annulla", command=self.cancel_clicked, 
-                 font=("Arial", 9), width=8).pack(side="right", padx=5, pady=5)
+        # Auto-fit images
+        self.auto_fit_var = tk.BooleanVar(
+            value=self.config_manager.config_data.get('auto_fit_images', True))
+        ttk.Checkbutton(frame, text="Adatta automaticamente immagini",
+                       variable=self.auto_fit_var).pack(anchor="w", padx=20, pady=5)
         
-        tk.Button(button_frame, text="OK", command=self.ok_clicked, 
-                 bg="lightgreen", font=("Arial", 9, "bold"), width=8).pack(side="right", padx=5, pady=5)
-
-    def update_font_preview(self, *args):
-        """Update font preview label"""
-        try:
-            font_name = self.font_name_var.get()
-            font_size = self.font_size_var.get()
-            font_bold = self.font_bold_var.get()
-            digits = self.counter_digits_var.get()
-            
-            font_style = "bold" if font_bold else "normal"
-            font_tuple = (font_name, font_size, font_style)
-            
-            counter_example = f"{1:0{digits}d}"
-            preview_text = f"{counter_example} Categoria Documento"
-            
-            self.font_preview.config(text=preview_text, font=font_tuple)
-        except:
-            self.font_preview.config(text="0001 Categoria Documento", font=("Arial", 10))
-
-    def browse_input_folder(self):
-        """Browse for input folder"""
-        folder = filedialog.askdirectory(title="Seleziona cartella input predefinita", 
-                                        initialdir=self.input_folder_var.get())
+        # Debug info
+        self.debug_var = tk.BooleanVar(
+            value=self.config_manager.config_data.get('show_debug_info', False))
+        ttk.Checkbutton(frame, text="Mostra informazioni debug",
+                       variable=self.debug_var).pack(anchor="w", padx=20, pady=5)
+        
+    def create_buttons(self):
+        """Create bottom buttons"""
+        button_frame = tk.Frame(self.dialog)
+        button_frame.pack(fill="x", side="bottom", pady=10)
+        
+        tk.Button(button_frame, text="OK", command=self.on_ok,
+                 bg="lightgreen", font=("Arial", 10, "bold"),
+                 width=10).pack(side="right", padx=10)
+        
+        tk.Button(button_frame, text="Annulla", command=self.on_cancel,
+                 font=("Arial", 10), width=10).pack(side="right", padx=5)
+        
+    def browse_folder(self, config_key):
+        """Browse for folder"""
+        folder = filedialog.askdirectory()
         if folder:
-            self.input_folder_var.set(folder)
-
-    def browse_output_folder(self):
-        """Browse for output folder"""
-        folder = filedialog.askdirectory(title="Seleziona cartella output predefinita", 
-                                        initialdir=self.output_folder_var.get())
-        if folder:
-            self.output_folder_var.set(folder)
-
-    def reset_defaults(self):
-        """Reset all settings to defaults"""
-        if messagebox.askyesno("Conferma", "Ripristinare tutte le impostazioni predefinite?"):
-            from config.constants import DEFAULT_CONFIG
+            if config_key == 'json_input_path':
+                self.json_folder_var.set(folder)
+            elif config_key == 'csv_output_path':
+                self.csv_output_var.set(folder)
+            elif config_key == 'default_input_folder':
+                self.default_input_folder_var.set(folder)
+            elif config_key == 'default_output_folder':
+                self.default_output_folder_var.set(folder)
+                
+    def on_width_changed(self):
+        """Update height proportionally when width changes"""
+        if self.keep_aspect_var.get():
+            # Calcola rapporto d'aspetto originale
+            original_width = self.config_manager.get('thumbnail_width', 80)
+            original_height = self.config_manager.get('thumbnail_height', 100)
+            aspect_ratio = original_height / original_width
+        
+            # Applica a nuova larghezza
+            new_width = self.thumb_width_var.get()
+            new_height = int(new_width * aspect_ratio)
+        
+            # Limita altezza ai bounds
+            new_height = max(80, min(250, new_height))
+            self.thumb_height_var.set(new_height)        
+        
             
-            self.input_folder_var.set("")
-            self.output_folder_var.set("")
-            self.counter_digits_var.set(DEFAULT_CONFIG['document_counter_digits'])
-            self.font_name_var.set(DEFAULT_CONFIG['document_font_name'])
-            self.font_size_var.set(DEFAULT_CONFIG['document_font_size'])
-            self.font_bold_var.set(DEFAULT_CONFIG['document_font_bold'])
-            self.export_format_var.set(DEFAULT_CONFIG['export_format'])
-            self.jpeg_quality_var.set(DEFAULT_CONFIG['jpeg_quality'])
-            self.csv_delimiter_var.set(DEFAULT_CONFIG['csv_delimiter'])
-            self.file_handling_var.set(DEFAULT_CONFIG['file_handling_mode'])
-            self.create_backup_var.set(DEFAULT_CONFIG['create_backup_on_overwrite'])
-            self.auto_save_var.set(DEFAULT_CONFIG['auto_save_changes'])
-            self.save_layout_var.set(DEFAULT_CONFIG['save_window_layout'])
-            self.auto_fit_var.set(DEFAULT_CONFIG['auto_fit_images'])
-            self.show_debug_var.set(DEFAULT_CONFIG['show_debug_info'])
-            self.thumb_width_var.set(DEFAULT_CONFIG['thumbnail_width'])
-            self.thumb_height_var.set(DEFAULT_CONFIG['thumbnail_height'])
-
-    def ok_clicked(self):
-        """Handle OK button click"""
-        self.config_data.update({
-            'default_input_folder': self.input_folder_var.get(),
-            'default_output_folder': self.output_folder_var.get(),
-            'document_counter_digits': self.counter_digits_var.get(),
-            'document_font_name': self.font_name_var.get(),
-            'document_font_size': self.font_size_var.get(),
-            'document_font_bold': self.font_bold_var.get(),
-            'export_format': self.export_format_var.get(),
-            'jpeg_quality': self.jpeg_quality_var.get(),
-            'csv_delimiter': self.csv_delimiter_var.get(),
-            'file_handling_mode': self.file_handling_var.get(),
-            'create_backup_on_overwrite': self.create_backup_var.get(),
-            'auto_save_changes': self.auto_save_var.get(),
-            'save_window_layout': self.save_layout_var.get(),
-            'auto_fit_images': self.auto_fit_var.get(),
-            'show_debug_info': self.show_debug_var.get(),
-            'thumbnail_width': self.thumb_width_var.get(),
-            'thumbnail_height': self.thumb_height_var.get()
-        })
-        self.result = self.config_data
+    def on_ok(self):
+        """Save settings and close"""
+        # Paths
+        self.config_manager.config_data['default_input_folder'] = \
+            self.default_input_folder_var.get()
+        self.config_manager.config_data['default_output_folder'] = \
+            self.default_output_folder_var.get()
+        self.config_manager.config_data['json_input_path'] = \
+            self.json_folder_var.get()
+        self.config_manager.config_data['use_input_folder_for_json'] = \
+            self.use_input_json_var.get()
+        
+        # Fonts
+        self.config_manager.config_data['fonts']['document_font_name'] = \
+            self.font_name_var.get()
+        self.config_manager.config_data['fonts']['document_font_size'] = \
+            self.font_size_var.get()
+        self.config_manager.config_data['fonts']['document_font_bold'] = \
+            self.font_bold_var.get()
+        
+        # Thumbnails
+        self.config_manager.config_data['thumbnail_width'] = \
+            self.thumb_width_var.get()
+        self.config_manager.config_data['thumbnail_height'] = \
+            self.thumb_height_var.get()
+        self.config_manager.config_data['thumbnail_keep_aspect_ratio'] = \
+            self.keep_aspect_var.get()
+            
+        # Export
+        self.config_manager.config_data['export_format'] = \
+            self.export_format_var.get()
+        self.config_manager.config_data['jpeg_quality'] = \
+            self.jpeg_quality_var.get()
+        self.config_manager.config_data['file_handling_mode'] = \
+            self.file_handling_var.get()
+        
+        # CSV
+        self.config_manager.config_data['csv_mode'] = self.csv_mode_var.get()
+        self.config_manager.config_data['csv_delimiter'] = self.csv_delimiter_var.get()
+        self.config_manager.config_data['csv_output_path'] = self.csv_output_var.get()
+        
+        # Batch
+        self.config_manager.config_data['batch_mode_enabled'] = self.batch_enabled_var.get()
+        
+        # Advanced
+        self.config_manager.config_data['auto_save_changes'] = self.auto_save_var.get()
+        self.config_manager.config_data['save_window_layout'] = self.save_layout_var.get()
+        self.config_manager.config_data['auto_fit_images'] = self.auto_fit_var.get()
+        self.config_manager.config_data['show_debug_info'] = self.debug_var.get()
+        
+        # Save
+        self.config_manager.save_config()
+        
+        self.result = True
         self.dialog.destroy()
-
-    def cancel_clicked(self):
-        """Handle Cancel button click"""
-        self.result = None
+        
+    def on_cancel(self):
+        """Cancel and close"""
+        self.result = False
         self.dialog.destroy()

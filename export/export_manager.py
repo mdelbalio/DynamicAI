@@ -1,357 +1,407 @@
 """
-Export manager for DynamicAI - handles all export operations
+Export Manager for DynamicAI v3.6 (BATCH EDITION)
+Gestisce export di documenti in formati multipli (JPEG, PDF, TIFF) e CSV.
+AGGIUNTO: export_metadata_csv() per gestione CSV incremental/per-file
 """
 
 import os
-import time
-import shutil
+import csv
 from PIL import Image
-from typing import List, Callable, Optional
-import tkinter as tk
-from tkinter import messagebox
+from typing import List, Dict, Optional
+from tempfile import NamedTemporaryFile
 
 class ExportManager:
-    """Manages export operations for all supported formats"""
+    """Gestisce export documenti e metadati"""
     
-    def __init__(self, config_data: dict):
-        self.config_data = config_data
-    
-    def export_documents(self, output_folder: str, document_groups: List, 
-                        current_document_name: str, progress_callback: Optional[Callable] = None) -> List[str]:
-        """Main export method that delegates to specific format handlers
+    def __init__(self, config_manager):
+        """
+        Args:
+            config_manager: Oggetto ConfigManager (non dict!)
+        """
+        self.config_manager = config_manager
+        
+    def sanitize_filename(self, filename: str) -> str:
+        """
+        Remove invalid characters from filename.
         
         Args:
-            output_folder: Output directory path
-            document_groups: List of DocumentGroup objects
-            current_document_name: Base name for exported files
-            progress_callback: Function to call with progress updates
+            filename: Original filename
             
         Returns:
-            List of exported filenames
+            Sanitized filename safe for filesystem
         """
-        export_format = self.config_data.get('export_format', 'JPEG')
+        invalid_chars = '<>:"/\\|?*'
+        sanitized = (filename or '').strip().strip('.')
+        for c in invalid_chars:
+            sanitized = sanitized.replace(c, '_')
+        return sanitized or 'untitled'
+    
+    def prepare_image_for_save(self, img: Image.Image) -> Image.Image:
+        """
+        Normalize image before saving.
+        
+        Args:
+            img: PIL Image
+            
+        Returns:
+            Normalized PIL Image
+        """
+        if img.mode not in ["RGB", "L"]:
+            img = img.convert("RGB")
+        return img
+    
+    def get_unique_filepath(self, base_path: str) -> str:
+        """
+        Create unique filepath if file exists (Windows style: file(1).ext).
+        
+        Args:
+            base_path: Original file path
+            
+        Returns:
+            Unique file path
+        """
+        if not os.path.exists(base_path):
+            return base_path
+        
+        base, ext = os.path.splitext(base_path)
+        counter = 1
+        new_path = f"{base}({counter}){ext}"
+        
+        while os.path.exists(new_path):
+            counter += 1
+            new_path = f"{base}({counter}){ext}"
+            
+            if counter > 9999:
+                raise Exception("Troppi file con lo stesso nome base")
+        
+        return new_path
+    
+    def export_documents(self, output_folder: str, document_groups: List, 
+                        document_name: str, progress_callback=None) -> List[str]:
+        """
+        Export documents to configured format.
+        
+        Args:
+            output_folder: Output directory
+            document_groups: List of DocumentGroup objects
+            document_name: Base document name
+            progress_callback: Optional callback for progress updates
+            
+        Returns:
+            List of exported file basenames
+        """
+        export_format = self.config_manager.get('export_format', 'JPEG')
+        exported_files = []
         
         if export_format == 'JPEG':
-            return self.export_as_jpeg(output_folder, document_groups, current_document_name, progress_callback)
+            exported_files = self._export_jpeg_single(
+                output_folder, document_groups, document_name, progress_callback)
         elif export_format == 'PDF_SINGLE':
-            return self.export_as_pdf_single(output_folder, document_groups, current_document_name, progress_callback)
+            exported_files = self._export_pdf_single(
+                output_folder, document_groups, document_name, progress_callback)
         elif export_format == 'PDF_MULTI':
-            return self.export_as_pdf_multi_per_document(output_folder, document_groups, current_document_name, progress_callback)
+            exported_files = self._export_pdf_multi(
+                output_folder, document_groups, document_name, progress_callback)
         elif export_format == 'TIFF_SINGLE':
-            return self.export_as_tiff_single(output_folder, document_groups, current_document_name, progress_callback)
+            exported_files = self._export_tiff_single(
+                output_folder, document_groups, document_name, progress_callback)
         elif export_format == 'TIFF_MULTI':
-            return self.export_as_tiff_multi_per_document(output_folder, document_groups, current_document_name, progress_callback)
-        else:
-            raise ValueError(f"Unsupported export format: {export_format}")
+            exported_files = self._export_tiff_multi(
+                output_folder, document_groups, document_name, progress_callback)
+        
+        return exported_files
     
-    def export_as_jpeg(self, output_folder: str, document_groups: List, 
-                      current_document_name: str, progress_callback: Optional[Callable] = None) -> List[str]:
-        """Export as individual JPEG files"""
+    def _export_jpeg_single(self, output_folder: str, document_groups: List,
+                           document_name: str, progress_callback) -> List[str]:
+        """Export each page as single JPEG file"""
         exported_files = []
+        quality = self.config_manager.get('jpeg_quality', 95)
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        
         page_counter = 1
-        quality = self.config_data.get('jpeg_quality', 95)
+        total_pages = sum(len(group.thumbnails) for group in document_groups)
         
         for group in document_groups:
             for thumbnail in group.thumbnails:
-                filename = f"{current_document_name}_{page_counter:03d}.jpg"
-                original_filepath = os.path.join(output_folder, filename)
-                
-                # Handle existing files with new system
-                final_filepath = self.check_overwrite(original_filepath, filename)
-                if final_filepath is None:  # User cancelled
-                    continue
-                    
-                final_filename = os.path.basename(final_filepath)
-                
                 if progress_callback:
-                    progress_callback(f"JPEG: {final_filename}...")
+                    progress_callback(f"Esportando pagina {page_counter}/{total_pages}")
                 
-                try:
-                    img = self.prepare_image_for_save(thumbnail.image)
-                    img.save(final_filepath, 'JPEG', quality=quality)
-                    exported_files.append(final_filename)
-                except Exception as e:
-                    print(f"Error saving {final_filename}: {e}")
+                filename = f"{document_name}_p{page_counter:04d}.jpg"
+                filepath = os.path.join(output_folder, filename)
                 
+                # Handle existing files
+                if os.path.exists(filepath):
+                    filepath = self._handle_existing_file(filepath, file_handling, filename)
+                    if filepath is None:
+                        continue
+                    filename = os.path.basename(filepath)
+                
+                # Save image
+                img = self.prepare_image_for_save(thumbnail.image)
+                img.save(filepath, 'JPEG', quality=quality, optimize=True)
+                
+                exported_files.append(filename)
                 page_counter += 1
         
         return exported_files
     
-    def export_as_pdf_single(self, output_folder: str, document_groups: List, 
-                           current_document_name: str, progress_callback: Optional[Callable] = None) -> List[str]:
-        """Export as individual PDF files"""
+    def _export_pdf_multi(self, output_folder: str, document_groups: List,
+                         document_name: str, progress_callback) -> List[str]:
+        """Export each document as multi-page PDF"""
         exported_files = []
-        page_counter = 1
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
         
-        for group in document_groups:
-            for thumbnail in group.thumbnails:
-                filename = f"{current_document_name}_{page_counter:03d}.pdf"
-                original_filepath = os.path.join(output_folder, filename)
-                
-                final_filepath = self.check_overwrite(original_filepath, filename)
-                if final_filepath is None:  # User cancelled
-                    continue
-                    
-                final_filename = os.path.basename(final_filepath)
-                
-                if progress_callback:
-                    progress_callback(f"PDF: {final_filename}...")
-                
-                try:
-                    img = self.prepare_image_for_save(thumbnail.image)
-                    img.save(final_filepath, 'PDF')
-                    exported_files.append(final_filename)
-                except Exception as e:
-                    print(f"Error saving {final_filename}: {e}")
-                
-                page_counter += 1
-        
-        return exported_files
-    
-    def export_as_pdf_multi_per_document(self, output_folder: str, document_groups: List, 
-                                       current_document_name: str, progress_callback: Optional[Callable] = None) -> List[str]:
-        """Export as multi-page PDF per document"""
-        exported_files = []
-        
-        for doc_index, group in enumerate(document_groups, 1):
-            if not group.thumbnails:  # Skip empty documents
+        for idx, group in enumerate(document_groups, 1):
+            if not group.thumbnails:
                 continue
-                
-            # Create safe filename
-            safe_category = self.sanitize_filename(group.categoryname)
-            filename = f"{current_document_name}_doc{doc_index:03d}_{safe_category}.pdf"
-            original_filepath = os.path.join(output_folder, filename)
-            
-            final_filepath = self.check_overwrite(original_filepath, filename)
-            if final_filepath is None:  # User cancelled
-                continue
-                
-            final_filename = os.path.basename(final_filepath)
             
             if progress_callback:
-                progress_callback(f"PDF Documento {doc_index}: {group.categoryname}...")
+                progress_callback(f"Esportando documento {idx}/{len(document_groups)}")
             
-            try:
-                images = []
-                for thumbnail in group.thumbnails:
-                    img = self.prepare_image_for_save(thumbnail.image)
-                    images.append(img)
-                
-                if images:
-                    images[0].save(final_filepath, 'PDF', save_all=True, append_images=images[1:])
-                    exported_files.append(final_filename)
-                    
-            except Exception as e:
-                print(f"Error saving multi-page PDF for document {group.categoryname}: {e}")
+            safe_category = self.sanitize_filename(group.categoryname)
+            filename = f"{document_name}_doc{idx:03d}_{safe_category}.pdf"
+            filepath = os.path.join(output_folder, filename)
+            
+            # Handle existing files
+            if os.path.exists(filepath):
+                filepath = self._handle_existing_file(filepath, file_handling, filename)
+                if filepath is None:
+                    continue
+                filename = os.path.basename(filepath)
+            
+            # Prepare images
+            images = [self.prepare_image_for_save(t.image) for t in group.thumbnails]
+            
+            # Save multi-page PDF
+            if images:
+                images[0].save(filepath, 'PDF', save_all=True,
+                             append_images=images[1:] if len(images) > 1 else [])
+                exported_files.append(filename)
         
         return exported_files
     
-    def export_as_tiff_single(self, output_folder: str, document_groups: List, 
-                            current_document_name: str, progress_callback: Optional[Callable] = None) -> List[str]:
-        """Export as individual TIFF files"""
+    def _export_pdf_single(self, output_folder: str, document_groups: List,
+                          document_name: str, progress_callback) -> List[str]:
+        """Export each page as single PDF file"""
         exported_files = []
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        
         page_counter = 1
+        total_pages = sum(len(group.thumbnails) for group in document_groups)
         
         for group in document_groups:
             for thumbnail in group.thumbnails:
-                filename = f"{current_document_name}_{page_counter:03d}.tiff"
-                original_filepath = os.path.join(output_folder, filename)
-                
-                final_filepath = self.check_overwrite(original_filepath, filename)
-                if final_filepath is None:  # User cancelled
-                    continue
-                    
-                final_filename = os.path.basename(final_filepath)
-                
                 if progress_callback:
-                    progress_callback(f"TIFF: {final_filename}...")
+                    progress_callback(f"Esportando pagina {page_counter}/{total_pages}")
                 
-                try:
-                    # TIFF can maintain original mode
-                    img = thumbnail.image
-                    img.save(final_filepath, 'TIFF')
-                    exported_files.append(final_filename)
-                except Exception as e:
-                    print(f"Error saving {final_filename}: {e}")
+                filename = f"{document_name}_p{page_counter:04d}.pdf"
+                filepath = os.path.join(output_folder, filename)
                 
+                if os.path.exists(filepath):
+                    filepath = self._handle_existing_file(filepath, file_handling, filename)
+                    if filepath is None:
+                        continue
+                    filename = os.path.basename(filepath)
+                
+                img = self.prepare_image_for_save(thumbnail.image)
+                img.save(filepath, 'PDF')
+                
+                exported_files.append(filename)
                 page_counter += 1
         
         return exported_files
     
-    def export_as_tiff_multi_per_document(self, output_folder: str, document_groups: List, 
-                                        current_document_name: str, progress_callback: Optional[Callable] = None) -> List[str]:
-        """Export as multi-page TIFF per document"""
+    def _export_tiff_single(self, output_folder: str, document_groups: List,
+                           document_name: str, progress_callback) -> List[str]:
+        """Export each page as single TIFF file"""
         exported_files = []
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        compression = self.config_manager.get('export', {}).get('tiff_compression', 'tiff_lzw')
         
-        for doc_index, group in enumerate(document_groups, 1):
-            if not group.thumbnails:  # Skip empty documents
-                continue
+        page_counter = 1
+        total_pages = sum(len(group.thumbnails) for group in document_groups)
+        
+        for group in document_groups:
+            for thumbnail in group.thumbnails:
+                if progress_callback:
+                    progress_callback(f"Esportando pagina {page_counter}/{total_pages}")
                 
-            safe_category = self.sanitize_filename(group.categoryname)
-            filename = f"{current_document_name}_doc{doc_index:03d}_{safe_category}.tiff"
-            original_filepath = os.path.join(output_folder, filename)
-            
-            final_filepath = self.check_overwrite(original_filepath, filename)
-            if final_filepath is None:  # User cancelled
-                continue
+                filename = f"{document_name}_p{page_counter:04d}.tiff"
+                filepath = os.path.join(output_folder, filename)
                 
-            final_filename = os.path.basename(final_filepath)
-            
-            if progress_callback:
-                progress_callback(f"TIFF Documento {doc_index}: {group.categoryname}...")
-            
-            try:
-                images = []
-                for thumbnail in group.thumbnails:
-                    images.append(thumbnail.image)
+                if os.path.exists(filepath):
+                    filepath = self._handle_existing_file(filepath, file_handling, filename)
+                    if filepath is None:
+                        continue
+                    filename = os.path.basename(filepath)
                 
-                if images:
-                    images[0].save(final_filepath, 'TIFF', save_all=True, append_images=images[1:])
-                    exported_files.append(final_filename)
-                    
-            except Exception as e:
-                print(f"Error saving multi-page TIFF for document {group.categoryname}: {e}")
+                img = self.prepare_image_for_save(thumbnail.image)
+                img.save(filepath, 'TIFF', compression=compression)
+                
+                exported_files.append(filename)
+                page_counter += 1
         
         return exported_files
     
-    def check_overwrite(self, filepath: str, filename: str) -> Optional[str]:
-        """Check if file should be overwritten or renamed - Sistema completo di gestione file esistenti"""
-        file_handling_mode = self.config_data.get('file_handling_mode', 'auto_rename')
+    def _export_tiff_multi(self, output_folder: str, document_groups: List,
+                          document_name: str, progress_callback) -> List[str]:
+        """Export each document as multi-page TIFF"""
+        exported_files = []
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        compression = self.config_manager.get('export', {}).get('tiff_compression', 'tiff_lzw')
         
-        if not os.path.exists(filepath):
-            return filepath
+        for idx, group in enumerate(document_groups, 1):
+            if not group.thumbnails:
+                continue
+            
+            if progress_callback:
+                progress_callback(f"Esportando documento {idx}/{len(document_groups)}")
+            
+            safe_category = self.sanitize_filename(group.categoryname)
+            filename = f"{document_name}_doc{idx:03d}_{safe_category}.tiff"
+            filepath = os.path.join(output_folder, filename)
+            
+            if os.path.exists(filepath):
+                filepath = self._handle_existing_file(filepath, file_handling, filename)
+                if filepath is None:
+                    continue
+                filename = os.path.basename(filepath)
+            
+            images = [self.prepare_image_for_save(t.image) for t in group.thumbnails]
+            
+            if images:
+                images[0].save(filepath, 'TIFF', save_all=True,
+                             append_images=images[1:] if len(images) > 1 else [],
+                             compression=compression)
+                exported_files.append(filename)
         
-        if file_handling_mode == 'auto_rename':
-            # Rinomina automaticamente stile Windows (1), (2), (3)...
+        return exported_files
+    
+    def _handle_existing_file(self, filepath: str, mode: str, 
+                             original_filename: str) -> Optional[str]:
+        """
+        Handle existing file based on configured mode.
+        
+        Args:
+            filepath: Full file path
+            mode: Handling mode (auto_rename, ask_overwrite, always_overwrite)
+            original_filename: Original filename for messages
+            
+        Returns:
+            New filepath or None if should skip
+        """
+        if mode == 'auto_rename':
             return self.get_unique_filepath(filepath)
-            
-        elif file_handling_mode == 'ask_overwrite':
-            # Chiedi conferma all'utente con popup a 3 opzioni
-            try:
-                result = messagebox.askyesnocancel(
-                    "File Esistente", 
-                    f"Il file '{filename}' esiste già.\n\n" +
-                    "• Sì = Sovrascrivi il file esistente\n" +
-                    "• No = Rinomina automaticamente\n" +
-                    "• Annulla = Salta questo file"
-                )
-                
-                if result is True:  # Yes - Sovrascrivi
-                    if self.config_data.get('create_backup_on_overwrite', False):
-                        self.create_file_backup(filepath)
-                    return filepath
-                elif result is False:  # No - Rinomina
-                    return self.get_unique_filepath(filepath)
-                else:  # Cancel - Salta
-                    return None
-                    
-            except Exception as e:
-                print(f"Error in dialog: {e}")
-                # Fallback: rinomina automaticamente
+        elif mode == 'ask_overwrite':
+            from tkinter import messagebox
+            response = messagebox.askyesnocancel(
+                "File Esistente",
+                f"Il file '{original_filename}' esiste già.\n\n"
+                "Sì = Sovrascrivi\n"
+                "No = Rinomina automaticamente\n"
+                "Annulla = Salta file"
+            )
+            if response is None:
+                return None
+            elif response is False:
                 return self.get_unique_filepath(filepath)
-                
-        elif file_handling_mode == 'always_overwrite':
-            # Sovrascrivi sempre senza chiedere
-            if self.config_data.get('create_backup_on_overwrite', False):
-                self.create_file_backup(filepath)
+            return filepath
+        elif mode == 'always_overwrite':
             return filepath
         
-        # Default fallback
         return filepath
     
-    def get_unique_filepath(self, filepath: str) -> str:
-        """Get unique filepath using Windows-style numbering (1), (2), etc."""
-        if not os.path.exists(filepath):
-            return filepath
+    def export_metadata_csv(self, metadata_rows: List[Dict], 
+                           input_file_name: Optional[str] = None,
+                           output_folder: Optional[str] = None) -> str:
+        """
+        Export metadata to CSV file.
+        NUOVO: Supporta modalità incremental e per_file.
         
-        directory = os.path.dirname(filepath)
-        basename = os.path.basename(filepath)
-        name, ext = os.path.splitext(basename)
+        Args:
+            metadata_rows: List of metadata dictionaries
+            input_file_name: Input document name (for per_file mode)
+            output_folder: Override output folder (optional)
+            
+        Returns:
+            Path to CSV file created
+        """
+        csv_mode = self.config_manager.get('csv_mode', 'incremental')
+        csv_output_path = self.config_manager.get('csv_output_path', '')
+        delimiter = self.config_manager.get('csv_delimiter', ';')
         
-        counter = 1
-        while True:
-            new_name = f"{name}({counter}){ext}"
-            new_filepath = os.path.join(directory, new_name)
-            
-            if not os.path.exists(new_filepath):
-                return new_filepath
-            
-            counter += 1
-            
-            # Safety check to avoid infinite loop
-            if counter > 1000:
-                break
-        
-        # Fallback with timestamp if too many files
-        timestamp = int(time.time())
-        new_name = f"{name}_{timestamp}{ext}"
-        return os.path.join(directory, new_name)
-    
-    def create_file_backup(self, filepath: str):
-        """Create backup of existing file"""
-        backup_path = filepath + '.backup'
-        try:
-            # Se esiste già un backup, usa numerazione progressiva
-            if os.path.exists(backup_path):
-                backup_path = self.get_unique_filepath(backup_path)
-            
-            shutil.copy2(filepath, backup_path)
-            print(f"Backup created: {backup_path}")
-        except Exception as e:
-            print(f"Error creating backup: {e}")
-    
-    def prepare_image_for_save(self, image: Image.Image) -> Image.Image:
-        """Prepare image for saving (convert to RGB if needed for JPEG/PDF)"""
-        if image.mode in ('RGBA', 'LA', 'P'):
-            # Create white background for transparency
-            rgb_img = Image.new('RGB', image.size, (255, 255, 255))
-            if image.mode == 'P':
-                image = image.convert('RGBA')
-            # Paste with alpha mask if available
-            rgb_img.paste(image, mask=image.split()[-1] if image.mode in ('RGBA', 'LA') else None)
-            return rgb_img
-        return image
-    
-    def sanitize_filename(self, filename: str) -> str:
-        """Remove invalid characters from filename"""
-        # Remove or replace invalid filename characters
-        invalid_chars = '<>:"/\\|?*'
-        sanitized = filename
-        for char in invalid_chars:
-            sanitized = sanitized.replace(char, '_')
-        
-        # Remove leading/trailing spaces and dots
-        sanitized = sanitized.strip(' .')
-        
-        # Limit length to avoid filesystem issues
-        if len(sanitized) > 100:
-            sanitized = sanitized[:100]
-            
-        # Ensure we don't have an empty filename
-        if not sanitized:
-            sanitized = "documento"
-            
-        return sanitized
-    
-    def get_export_summary(self, exported_files: List[str], export_format: str) -> str:
-        """Generate a summary message for the export operation"""
-        summary = f"Export completato!\n\n"
-        summary += f"Formato: {export_format}\n"
-        summary += f"File creati: {len(exported_files)}\n\n"
-        
-        if export_format in ['PDF_MULTI', 'TIFF_MULTI']:
-            summary += "Nota: Ogni documento è stato salvato come file multi-pagina\n"
+        # Determine output folder
+        if output_folder:
+            csv_folder = output_folder
+        elif csv_output_path:
+            csv_folder = csv_output_path
         else:
-            summary += "Nota: Ogni pagina è stata salvata come file separato\n"
-            
-        if len(exported_files) > 10:
-            summary += f"\nPrimi file creati:\n"
-            for i, filename in enumerate(exported_files[:10]):
-                summary += f"• {filename}\n"
-            summary += f"... e altri {len(exported_files) - 10} file"
-        else:
-            summary += f"\nFile creati:\n"
-            for filename in exported_files:
-                summary += f"• {filename}\n"
+            csv_folder = self.config_manager.get('default_output_folder', '')
         
+        if not os.path.exists(csv_folder):
+            os.makedirs(csv_folder, exist_ok=True)
+        
+        # Determine CSV filename
+        if csv_mode == 'incremental':
+            csv_filename = "metadata.csv"
+            csv_path = os.path.join(csv_folder, csv_filename)
+            write_header = not os.path.exists(csv_path)
+            mode = 'a'  # Append mode
+        else:  # per_file
+            if not input_file_name:
+                raise ValueError("Per la modalità per_file serve input_file_name")
+            
+            base_name = os.path.splitext(os.path.basename(input_file_name))[0]
+            csv_filename = f"{base_name}.csv"
+            csv_path = os.path.join(csv_folder, csv_filename)
+            
+            # Handle existing file
+            file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+            if os.path.exists(csv_path):
+                csv_path = self._handle_existing_file(csv_path, file_handling, csv_filename)
+                if csv_path is None:
+                    return ""
+            
+            write_header = True
+            mode = 'w'  # Write mode
+        
+        # Write CSV
+        if metadata_rows:
+            fieldnames = list(metadata_rows[0].keys())
+            
+            try:
+                with open(csv_path, mode, newline='', encoding='utf-8') as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter)
+                    
+                    if write_header:
+                        writer.writeheader()
+                    
+                    for row in metadata_rows:
+                        writer.writerow(row)
+                
+                return csv_path
+                
+            except Exception as e:
+                raise Exception(f"Errore scrittura CSV: {str(e)}")
+        
+        return csv_path
+    
+    def create_export_summary(self, exported_files: List[str], 
+                             metadata_file: Optional[str] = None) -> Dict:
+        """
+        Create export summary.
+        
+        Args:
+            exported_files: List of exported file basenames
+            metadata_file: Path to CSV metadata file
+            
+        Returns:
+            Summary dictionary
+        """
+        summary = {
+            'files_count': len(exported_files),
+            'files': exported_files,
+            'metadata_csv': metadata_file,
+            'export_format': self.config_manager.get('export_format', 'JPEG')
+        }
         return summary

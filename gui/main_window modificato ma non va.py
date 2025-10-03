@@ -17,7 +17,7 @@ from database import CategoryDatabase
 from loaders import create_document_loader
 from export import ExportManager
 from gui.dialogs import CategorySelectionDialog, SettingsDialog
-from gui.dialogs.batch_manager import BatchManagerDialog
+from gui.dialogs.batch_manager import BatchManagerDialog 
 from gui.components import DocumentGroup, PageThumbnail
 from utils import create_progress_dialog, show_help_dialog, show_about_dialog
 from config.constants import RESAMPLEFILTER
@@ -138,25 +138,17 @@ class AIDOXAApp(tk.Tk):
         menubar.add_cascade(label="Visualizza", menu=view_menu)
         view_menu.add_command(label="Aggiorna Miniature", command=self.refresh_thumbnails)
 
-        # Batch menu
+        # AGGIUNGI QUESTA SEZIONE (BATCH MENU)
         if self.config_manager.get('batch_mode_enabled', True):
             batch_menu = tk.Menu(menubar, tearoff=0)
             menubar.add_cascade(label="Batch", menu=batch_menu)
             batch_menu.add_command(label="Esegui Batch...", 
-                                  command=self.open_batch_manager,
-                                  accelerator="Ctrl+B")
+                              command=self.open_batch_manager,
+                              accelerator="Ctrl+B")
             batch_menu.add_separator()
             batch_menu.add_command(label="Info Batch", 
-                                  command=self.show_batch_info)
-        # Help menu
-        help_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Aiuto", menu=help_menu)
-        help_menu.add_command(label="Istruzioni", command=lambda: show_help_dialog(self))
-        help_menu.add_command(label="Informazioni", command=lambda: show_about_dialog(self))
-
-    def create_widgets(self):
-        """Create main application widgets"""
-        # Single horizontal PanedWindow with three independent panels
+                              command=self.show_batch_info)
+        # FINE SEZIONE BATCH
         self.main_paned = tk.PanedWindow(self, orient=tk.HORIZONTAL, 
                                         sashrelief=tk.RAISED, sashwidth=4, sashpad=2,
                                         bg="gray")
@@ -164,7 +156,7 @@ class AIDOXAApp(tk.Tk):
 
         # Left panel for documents and thumbnails
         self.left_panel = tk.Frame(self.main_paned, bg="lightgray", bd=1, relief="solid")
-        self.main_paned.add(self.left_panel, width=400, minsize=200, sticky="nsew")  # Ridotto minsize
+        self.main_paned.add(self.left_panel, width=400, minsize=250, sticky="nsew")
 
         # Center panel for image display
         self.center_panel = tk.Frame(self.main_paned, bg="black", bd=1, relief="solid")
@@ -172,7 +164,7 @@ class AIDOXAApp(tk.Tk):
 
         # Right panel for controls
         self.right_panel = tk.Frame(self.main_paned, bg="lightgray", bd=1, relief="solid")
-        self.main_paned.add(self.right_panel, width=300, minsize=150, sticky="nsew")  # Ridotto minsize
+        self.main_paned.add(self.right_panel, width=300, minsize=200, sticky="nsew")
 
     def setup_left_panel(self):
         """Setup left panel with document list and thumbnails"""
@@ -448,15 +440,15 @@ class AIDOXAApp(tk.Tk):
         self.bind_all('<Control-e>', lambda e: self.complete_sequence_export())
         self.bind_all('<Control-q>', lambda e: self.on_closing())
         
-        # Batch shortcut
+        # NEW: Batch shortcut
         if self.config_manager.get('batch_mode_enabled', True):
             self.bind_all('<Control-b>', lambda e: self.open_batch_manager())
-        
+            
         # Window events
-        # if self.config_manager.get('save_window_layout', True):
-        #   self.bind('<Configure>', self.on_window_configure)
-        #   self.bind_all('<B1-Motion>', self.on_paned_motion)
-        #   self.bind_all('<ButtonRelease-1>', self.on_paned_release)
+        if self.config_manager.get('save_window_layout', True):
+            self.bind('<Configure>', self.on_window_configure)
+            self.bind_all('<B1-Motion>', self.on_paned_motion)
+            self.bind_all('<ButtonRelease-1>', self.on_paned_release)
         
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -473,11 +465,7 @@ class AIDOXAApp(tk.Tk):
 
     def on_window_configure(self, event):
         """Handle window resize/move events"""
-        # IMPORTANTE: ignora eventi che non sono della finestra principale
-        if event.widget != self:
-            return
-    
-        if self.config_manager.get('save_window_layout', True):
+        if event.widget == self and self.config_manager.get('save_window_layout', True):
             if hasattr(self, '_save_config_after_id'):
                 self.after_cancel(self._save_config_after_id)
             self._save_config_after_id = self.after(2000, self.save_config)
@@ -592,7 +580,7 @@ class AIDOXAApp(tk.Tk):
     # Menu handlers
     def open_settings(self):
         """Open settings dialog"""
-        dialog = SettingsDialog(self, self.config_manager)
+        dialog = SettingsDialog(self, self.config_manager.config_data)
         if dialog.result:
             old_thumb_size = (self.config_manager.get('thumbnail_width', 80), 
                             self.config_manager.get('thumbnail_height', 100))
@@ -933,6 +921,136 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             if 'progress_window' in locals():
                 progress_window.destroy()
             messagebox.showerror("Errore", f"Errore durante l'export: {str(e)}")
+    
+    # ==========================================
+    # BATCH MANAGER METHODS
+    # ==========================================
+    
+    def open_batch_manager(self):
+        """Open batch manager dialog"""
+        if not self.config_manager.get('batch_mode_enabled', True):
+            messagebox.showinfo("Batch Disabilitato", 
+                              "Il Batch Manager è disabilitato nelle impostazioni.")
+            return
+        
+        try:
+            dialog = BatchManagerDialog(self, self.config_manager, self)
+            self.wait_window(dialog.dialog)
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore apertura Batch Manager: {str(e)}")
+    
+    def show_batch_info(self):
+        """Show batch manager information"""
+        info_text = """BATCH MANAGER - Elaborazione Multipla Documenti
+
+Il Batch Manager permette di processare multipli documenti in sequenza automatica.
+
+FUNZIONALITÀ:
+- Scansione automatica cartella con PDF/TIFF + JSON
+- Rilevamento coppie documento-metadati
+- Elaborazione sequenziale con validazione
+- Export finale CSV con tutti i metadati
+
+WORKFLOW SUPPORTATI:
+1. JSON con "categories" → split documento in categorie
+2. JSON flat metadati → documento unico con metadati tabellari
+
+MODALITÀ CSV:
+- Incrementale: unico metadata.csv con tutti i documenti
+- Per File: CSV separato per ogni documento
+
+Per utilizzare: Menu Batch → Esegui Batch (Ctrl+B)"""
+        
+        messagebox.showinfo("Informazioni Batch Manager", info_text)
+    
+    def load_document_from_batch(self, doc_path: str, json_path: str):
+        """
+        Load document from batch processing.
+        
+        Args:
+            doc_path: Path to PDF/TIFF document
+            json_path: Path to JSON metadata file
+        """
+        try:
+            # Load JSON
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            self.original_data = data
+            
+            # Detect workflow type
+            if 'categories' in data:
+                # WORKFLOW 1: Split categories (existing)
+                self.load_metadata_from_json(data)
+                categories = data.get('categories', [])
+                self.current_document_name = os.path.splitext(os.path.basename(doc_path))[0]
+                
+                # Extract all categories
+                self.all_categories = set(cat['categoria'] for cat in categories 
+                                         if cat['categoria'] != "Pagina vuota")
+                self.update_category_combo()
+                
+                # Load document
+                self.load_document(doc_path)
+                self.build_document_groups(categories)
+                
+                self.update_document_instructions(json_path, doc_path, 
+                                                os.path.dirname(doc_path), categories)
+            else:
+                # WORKFLOW 2: Simple metadata (new)
+                self.load_simple_metadata_document(doc_path, data)
+        
+        except Exception as e:
+            raise Exception(f"Errore caricamento documento batch: {str(e)}")
+    
+    def load_simple_metadata_document(self, doc_path: str, metadata: dict):
+        """
+        Load document with simple flat metadata (no categories split).
+        NEW: Workflow for JSON without 'categories' key.
+        
+        Args:
+            doc_path: Path to document
+            metadata: Flat metadata dictionary
+        """
+        # Load metadata as header
+        flat_metadata = {str(k): "" if v is None else str(v) 
+                        for k, v in metadata.items()}
+        self.load_metadata_from_json({'header': flat_metadata})
+        
+        self.current_document_name = os.path.splitext(os.path.basename(doc_path))[0]
+        
+        # Load document
+        self.load_document(doc_path)
+        
+        # Create single document group with all pages
+        if self.documentloader:
+            single_group = DocumentGroup(self.content_frame, 
+                                        "Documento Completo", self, 1)
+            
+            for pagenum in range(1, self.documentloader.totalpages + 1):
+                img = self.documentloader.get_page(pagenum)
+                if img:
+                    single_group.add_page(pagenum, img)
+            
+            single_group.pack(pady=5, fill="x", padx=5)
+            self.documentgroups = [single_group]
+            
+            self.after_idle(self.update_scroll_region)
+        
+        # Update instructions
+        self.update_instructions(
+            f"DOCUMENTO CARICATO (Workflow Semplice):\n\n"
+            f"File: {os.path.basename(doc_path)}\n"
+            f"Pagine: {self.documentloader.totalpages if self.documentloader else 0}\n"
+            f"Modalità: Documento unico con metadati\n\n"
+            f"METADATI:\n" + 
+            "\n".join([f"  {k}: {v}" for k, v in flat_metadata.items() if v])
+        )
+                   
+        except Exception as e:
+            if 'progress_window' in locals():
+                progress_window.destroy()
+            messagebox.showerror("Errore", f"Errore durante l'export: {str(e)}")
 
     def export_csv_metadata(self, output_folder: str, exported_files: List[str]) -> str:
         """Export CSV file with metadata - respects file handling settings"""
@@ -1043,7 +1161,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         new_path = os.path.join(folder, original_filename)
         
         while os.path.exists(new_path):
-            new_filename = f"{base_name}({counter}){extension}"
+            new_filename = f"{base_name}_{counter:03d}{extension}"
             new_path = os.path.join(folder, new_filename)
             counter += 1
             
@@ -1495,7 +1613,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             
             self.renumber_documents()
             
-            self.after_idle(self.update_scroll_region)
+            self.repack_all_documents()
             
             if self.selected_group == document_group:
                 self.selected_group = None
@@ -1523,46 +1641,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         """Repack all document groups in UI"""
         for group in self.documentgroups:
             group.pack_forget()
-    # ==========================================
-    # BATCH MANAGER METHODS
-    # ==========================================
-    
-    def open_batch_manager(self):
-        """Open batch manager dialog"""
-        if not self.config_manager.get('batch_mode_enabled', True):
-            messagebox.showinfo("Batch Disabilitato", 
-                              "Il Batch Manager è disabilitato nelle impostazioni.")
-            return
-        
-        try:
-            dialog = BatchManagerDialog(self, self.config_manager, self)
-            self.wait_window(dialog.dialog)
-        except Exception as e:
-            messagebox.showerror("Errore", f"Errore apertura Batch Manager: {str(e)}")
-    
-    def show_batch_info(self):
-        """Show batch manager information"""
-        info_text = """BATCH MANAGER - Elaborazione Multipla Documenti
-
-Il Batch Manager permette di processare multipli documenti in sequenza automatica.
-
-FUNZIONALITÀ:
-- Scansione automatica cartella con PDF/TIFF + JSON
-- Rilevamento coppie documento-metadati
-- Elaborazione sequenziale con validazione
-- Export finale CSV con tutti i metadati
-
-WORKFLOW SUPPORTATI:
-1. JSON con "categories" → split documento in categorie
-2. JSON flat metadati → documento unico con metadati tabellari
-
-MODALITÀ CSV:
-- Incrementale: unico metadata.csv con tutti i documenti
-- Per File: CSV separato per ogni documento
-
-Per utilizzare: Menu Batch → Esegui Batch (Ctrl+B)"""
-        
-        messagebox.showinfo("Informazioni Batch Manager", info_text)
         
         for group in self.documentgroups:
             group.pack(pady=5, fill="x", padx=5)
