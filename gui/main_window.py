@@ -1182,12 +1182,37 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.debug_print(f"select_thumbnail called for page {thumbnail.pagenum}")
         
         if self.selected_thumbnail:
-            self.selected_thumbnail.deselect()
+            try:
+                self.selected_thumbnail.deselect()
+            except tk.TclError:
+                pass
         if self.selected_group:
-            self.selected_group.deselect_group()
+            try:
+                self.selected_group.deselect_group()
+            except tk.TclError:
+                pass
             
         self.selected_thumbnail = thumbnail
         self.selected_group = thumbnail.document_group
+        
+        thumbnail.select()
+        self.selected_group.select_group()
+        
+        self.debug_print(f"About to display image for page {thumbnail.pagenum}")
+        
+        try:
+            if thumbnail.image:
+                self.display_image(thumbnail.image)
+                self.debug_print(f"Image displayed successfully for page {thumbnail.pagenum}")
+            else:
+                self.debug_print(f"No image found for page {thumbnail.pagenum}")
+        except Exception as e:
+            print(f"[ERROR] Failed to display image: {e}")
+            self.debug_print(f"Error displaying image: {e}")
+        
+        self.category_var.set(thumbnail.categoryname)
+        self.selection_info.config(text=f"Selezionata: Pagina {thumbnail.pagenum}")
+        self.page_info_label.config(text=f"Documento: {thumbnail.categoryname}")
         
         thumbnail.select()
         self.selected_group.select_group()
