@@ -448,7 +448,7 @@ class AIDOXAApp(tk.Tk):
         # Rimuovi frame esistente se presente
         if hasattr(self, 'metadata_frame'):
             self.metadata_frame.destroy()
-    
+
         self.metadata_frame = tk.LabelFrame(
             self.right_panel, text="Metadati Documento",
             font=("Arial", 10, "bold"), bg="lightgray",
@@ -456,28 +456,45 @@ class AIDOXAApp(tk.Tk):
         )
         self.metadata_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Canvas + scrollbar per scrolling
-        canvas = tk.Canvas(self.metadata_frame, bg="lightgray", highlightthickness=0)
-        scrollbar = tk.Scrollbar(self.metadata_frame, orient="vertical", command=canvas.yview)
+        # Container per canvas + scrollbar
+        container = tk.Frame(self.metadata_frame, bg="lightgray")
+        container.pack(fill="both", expand=True)
+
+        # Canvas con larghezza minima più grande
+        canvas = tk.Canvas(container, bg="lightgray", highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+    
+        # Frame scrollabile che si espande
         scrollable_frame = tk.Frame(canvas, bg="lightgray")
 
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        def on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            # Forza il canvas a essere largo almeno quanto il frame
+            canvas_width = max(scrollable_frame.winfo_reqwidth(), 240)
+            canvas.itemconfig(canvas_window, width=canvas_width)
 
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        scrollable_frame.bind("<Configure>", on_frame_configure)
+
+        # Crea window con anchor="nw" e width iniziale
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
         self.metadata_vars = {}
         self.metadata_entries = {}
-        self.scrollable_metadata_frame = scrollable_frame  # Salva riferimento per rebuild
+        self.scrollable_metadata_frame = scrollable_frame
 
         # Popola con metadati correnti
         self.populate_metadata_fields(scrollable_frame)
 
+        # Pack canvas e scrollbar
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+        # Bind per adattare larghezza quando il canvas cambia
+        def on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+    
+        canvas.bind("<Configure>", on_canvas_configure)
 
         # Scroll con rotellina
         def on_metadata_mousewheel(event):
@@ -487,11 +504,11 @@ class AIDOXAApp(tk.Tk):
         scrollable_frame.bind("<MouseWheel>", on_metadata_mousewheel)
 
     def populate_metadata_fields(self, parent_frame):
-        """Populate metadata fields dynamically from current header_metadata"""
+        """Populate metadata fields dynamically from current header_metadata - RESPONSIVE"""
         # Clear existing widgets
         for widget in parent_frame.winfo_children():
             widget.destroy()
-    
+
         self.metadata_vars.clear()
         self.metadata_entries.clear()
 
@@ -504,12 +521,13 @@ class AIDOXAApp(tk.Tk):
             )
             lbl.grid(row=row, column=0, sticky="w", padx=5, pady=(5, 0))
 
-            # Entry per valore
+            # Entry per valore - RESPONSIVE
             self.metadata_vars[field] = tk.StringVar(value=value)
             entry = tk.Entry(
                 parent_frame, textvariable=self.metadata_vars[field],
                 font=("Arial", 9), bg="white"
             )
+            # CAMBIATO: sticky="ew" fa espandere l'entry in orizzontale
             entry.grid(row=row+1, column=0, sticky="ew", padx=5, pady=(0, 5), ipady=3)
             self.metadata_entries[field] = entry
 
@@ -518,8 +536,11 @@ class AIDOXAApp(tk.Tk):
 
             row += 2
 
-        # Allineamento larghezza
+        # IMPORTANTE: Configura colonna per espandersi
         parent_frame.grid_columnconfigure(0, weight=1)
+    
+        # AGGIUNTO: Forza update del layout
+        parent_frame.update_idletasks()
 
     def setup_instructions_area(self):
         """Setup instructions text area"""
