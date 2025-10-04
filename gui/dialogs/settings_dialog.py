@@ -21,7 +21,8 @@ class SettingsDialog:
         # Create dialog
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Impostazioni DynamicAI")
-        self.dialog.geometry("700x600")
+        self.dialog.geometry("700x650")
+        self.dialog.minsize(700, 650)
         self.dialog.transient(parent)
         self.dialog.grab_set()
         

@@ -292,6 +292,10 @@ class AIDOXAApp(tk.Tk):
                               command=self.complete_sequence_export, 
                               bg="lightgreen", font=("Arial", 10, "bold"), width=25)
         btn_export.pack(pady=2)
+        btn_reset = tk.Button(button_frame, text="Rimuovi Documenti Caricati", 
+                             command=self.reset_workspace, 
+                             bg="lightcoral", font=("Arial", 10, "bold"), width=25)
+        btn_reset.pack(pady=2)
 
         # Scroll frame for documents
         self.setup_document_scroll_area()
@@ -1180,16 +1184,16 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         # Logica nome file CSV - Priorità: Custom > Documento > Cartella
         custom_name = self.config_manager.get('csv_custom_name', '').strip()
         use_doc_name = self.config_manager.get('csv_use_document_name', False)
-        
+    
         if custom_name:
             # Priorità 1: Nome personalizzato
             csv_filename = f"{custom_name}.csv"
         elif use_doc_name and self.current_document_name:
-            # Priorità 2: Nome documento
+            # Priorità 2: Nome documento (sempre usa questo come default)
             csv_filename = f"{self.current_document_name}.csv"
         else:
-            # Priorità 3: Nome cartella (default)
-            csv_filename = f"{self.input_folder_name}.csv"
+            # Priorità 3: Nome documento (DEFAULT - non più cartella)
+            csv_filename = f"{self.current_document_name}.csv" if self.current_document_name else f"{self.input_folder_name}.csv"
         
         csv_path = os.path.join(output_folder, csv_filename)
     
@@ -1221,8 +1225,8 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         delimiter = self.config_manager.get('csv_delimiter', ';')
     
         try:
-            with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-                writer = csv.writer(csvfile, delimiter=delimiter)
+            with open(csv_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                writer = csv.writer(csvfile, delimiter=delimiter, quoting=csv.QUOTE_MINIMAL)
             
                 # Header dinamico: Nome File + Categoria + tutti i metadati
                 header_row = ['Nome File', 'Categoria'] + list(self.header_metadata.keys())

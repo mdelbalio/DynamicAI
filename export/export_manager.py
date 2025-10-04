@@ -93,21 +93,47 @@ class ExportManager:
         export_format = self.config_manager.get('export_format', 'JPEG')
         exported_files = []
         
-        if export_format == 'JPEG':
-            exported_files = self._export_jpeg_single(
-                output_folder, document_groups, document_name, progress_callback)
-        elif export_format == 'PDF_SINGLE':
-            exported_files = self._export_pdf_single(
-                output_folder, document_groups, document_name, progress_callback)
-        elif export_format == 'PDF_MULTI':
-            exported_files = self._export_pdf_multi(
-                output_folder, document_groups, document_name, progress_callback)
-        elif export_format == 'TIFF_SINGLE':
-            exported_files = self._export_tiff_single(
-                output_folder, document_groups, document_name, progress_callback)
-        elif export_format == 'TIFF_MULTI':
-            exported_files = self._export_tiff_multi(
-                output_folder, document_groups, document_name, progress_callback)
+        # Determina modalità: SPLIT (multipli documenti) o SINGLE (documento unico)
+        is_split_mode = len(document_groups) > 1
+        
+        if progress_callback:
+            mode_text = "SPLIT (categorie)" if is_split_mode else "SINGLE (documento unico)"
+            progress_callback(f"Modalità export: {mode_text}")
+        
+        if is_split_mode:
+            # SPLIT MODE: Usa naming con _doc001_categoria
+            if export_format == 'JPEG':
+                exported_files = self._export_jpeg_single(
+                    output_folder, document_groups, document_name, progress_callback)
+            elif export_format == 'PDF_SINGLE':
+                exported_files = self._export_pdf_single(
+                    output_folder, document_groups, document_name, progress_callback)
+            elif export_format == 'PDF_MULTI':
+                exported_files = self._export_pdf_multi(
+                    output_folder, document_groups, document_name, progress_callback)
+            elif export_format == 'TIFF_SINGLE':
+                exported_files = self._export_tiff_single(
+                    output_folder, document_groups, document_name, progress_callback)
+            elif export_format == 'TIFF_MULTI':
+                exported_files = self._export_tiff_multi(
+                    output_folder, document_groups, document_name, progress_callback)
+        else:
+            # SINGLE MODE: Nome file originale (senza _doc001_)
+            if export_format == 'JPEG':
+                exported_files = self._export_jpeg_single_mode(
+                    output_folder, document_groups, document_name, progress_callback)
+            elif export_format == 'PDF_SINGLE':
+                exported_files = self._export_pdf_single_mode(
+                    output_folder, document_groups, document_name, progress_callback)
+            elif export_format == 'PDF_MULTI':
+                exported_files = self._export_pdf_multi_single_mode(
+                    output_folder, document_groups, document_name, progress_callback)
+            elif export_format == 'TIFF_SINGLE':
+                exported_files = self._export_tiff_single_mode(
+                    output_folder, document_groups, document_name, progress_callback)
+            elif export_format == 'TIFF_MULTI':
+                exported_files = self._export_tiff_multi_single_mode(
+                    output_folder, document_groups, document_name, progress_callback)
         
         return exported_files
     
@@ -274,6 +300,156 @@ class ExportManager:
                              append_images=images[1:] if len(images) > 1 else [],
                              compression=compression)
                 exported_files.append(filename)
+        
+        return exported_files
+
+    # ==========================================
+    # SINGLE MODE EXPORT METHODS
+    # ==========================================
+    
+    def _export_jpeg_single_mode(self, output_folder: str, document_groups: List,
+                                 document_name: str, progress_callback) -> List[str]:
+        """Export all pages as single JPEG files with original document name"""
+        exported_files = []
+        quality = self.config_manager.get('jpeg_quality', 95)
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        
+        group = document_groups[0]  # Solo un gruppo in single mode
+        total_pages = len(group.thumbnails)
+        
+        for page_num, thumbnail in enumerate(group.thumbnails, 1):
+            if progress_callback:
+                progress_callback(f"Esportando pagina {page_num}/{total_pages}")
+            
+            filename = f"{document_name}_p{page_num:04d}.jpg"
+            filepath = os.path.join(output_folder, filename)
+            
+            if os.path.exists(filepath):
+                filepath = self._handle_existing_file(filepath, file_handling, filename)
+                if filepath is None:
+                    continue
+                filename = os.path.basename(filepath)
+            
+            img = self.prepare_image_for_save(thumbnail.image)
+            img.save(filepath, 'JPEG', quality=quality, optimize=True)
+            exported_files.append(filename)
+        
+        return exported_files
+    
+    def _export_pdf_single_mode(self, output_folder: str, document_groups: List,
+                                document_name: str, progress_callback) -> List[str]:
+        """Export all pages as single PDF files with original document name"""
+        exported_files = []
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        
+        group = document_groups[0]
+        total_pages = len(group.thumbnails)
+        
+        for page_num, thumbnail in enumerate(group.thumbnails, 1):
+            if progress_callback:
+                progress_callback(f"Esportando pagina {page_num}/{total_pages}")
+            
+            filename = f"{document_name}_p{page_num:04d}.pdf"
+            filepath = os.path.join(output_folder, filename)
+            
+            if os.path.exists(filepath):
+                filepath = self._handle_existing_file(filepath, file_handling, filename)
+                if filepath is None:
+                    continue
+                filename = os.path.basename(filepath)
+            
+            img = self.prepare_image_for_save(thumbnail.image)
+            img.save(filepath, 'PDF')
+            exported_files.append(filename)
+        
+        return exported_files
+    
+    def _export_pdf_multi_single_mode(self, output_folder: str, document_groups: List,
+                                      document_name: str, progress_callback) -> List[str]:
+        """Export as single multi-page PDF with original document name"""
+        exported_files = []
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        
+        group = document_groups[0]
+        
+        if progress_callback:
+            progress_callback("Esportando documento unico PDF")
+        
+        filename = f"{document_name}.pdf"
+        filepath = os.path.join(output_folder, filename)
+        
+        if os.path.exists(filepath):
+            filepath = self._handle_existing_file(filepath, file_handling, filename)
+            if filepath is None:
+                return []
+            filename = os.path.basename(filepath)
+        
+        images = [self.prepare_image_for_save(t.image) for t in group.thumbnails]
+        
+        if images:
+            images[0].save(filepath, 'PDF', save_all=True,
+                         append_images=images[1:] if len(images) > 1 else [])
+            exported_files.append(filename)
+        
+        return exported_files
+    
+    def _export_tiff_single_mode(self, output_folder: str, document_groups: List,
+                                 document_name: str, progress_callback) -> List[str]:
+        """Export all pages as single TIFF files with original document name"""
+        exported_files = []
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        compression = self.config_manager.get('export', {}).get('tiff_compression', 'tiff_lzw')
+        
+        group = document_groups[0]
+        total_pages = len(group.thumbnails)
+        
+        for page_num, thumbnail in enumerate(group.thumbnails, 1):
+            if progress_callback:
+                progress_callback(f"Esportando pagina {page_num}/{total_pages}")
+            
+            filename = f"{document_name}_p{page_num:04d}.tiff"
+            filepath = os.path.join(output_folder, filename)
+            
+            if os.path.exists(filepath):
+                filepath = self._handle_existing_file(filepath, file_handling, filename)
+                if filepath is None:
+                    continue
+                filename = os.path.basename(filepath)
+            
+            img = self.prepare_image_for_save(thumbnail.image)
+            img.save(filepath, 'TIFF', compression=compression)
+            exported_files.append(filename)
+        
+        return exported_files
+    
+    def _export_tiff_multi_single_mode(self, output_folder: str, document_groups: List,
+                                       document_name: str, progress_callback) -> List[str]:
+        """Export as single multi-page TIFF with original document name"""
+        exported_files = []
+        file_handling = self.config_manager.get('file_handling_mode', 'auto_rename')
+        compression = self.config_manager.get('export', {}).get('tiff_compression', 'tiff_lzw')
+        
+        group = document_groups[0]
+        
+        if progress_callback:
+            progress_callback("Esportando documento unico TIFF")
+        
+        filename = f"{document_name}.tiff"
+        filepath = os.path.join(output_folder, filename)
+        
+        if os.path.exists(filepath):
+            filepath = self._handle_existing_file(filepath, file_handling, filename)
+            if filepath is None:
+                return []
+            filename = os.path.basename(filepath)
+        
+        images = [self.prepare_image_for_save(t.image) for t in group.thumbnails]
+        
+        if images:
+            images[0].save(filepath, 'TIFF', save_all=True,
+                         append_images=images[1:] if len(images) > 1 else [],
+                         compression=compression)
+            exported_files.append(filename)
         
         return exported_files
     
