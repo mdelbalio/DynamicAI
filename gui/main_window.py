@@ -383,12 +383,32 @@ class AIDOXAApp(tk.Tk):
         self.content_frame.bind("<Configure>", 
                                lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         
-        # Mouse wheel scrolling
+        # Mouse wheel scrolling - MIGLIORATO
         def on_mousewheel(event):
             self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            return "break"  # Previene propagazione evento
         
+        def bind_mousewheel(widget):
+            """Bind ricorsivo su tutti i widget figli"""
+            widget.bind("<MouseWheel>", on_mousewheel)
+            widget.bind("<Button-4>", lambda e: (self.canvas.yview_scroll(-1, "units"), "break"))
+            widget.bind("<Button-5>", lambda e: (self.canvas.yview_scroll(1, "units"), "break"))
+            for child in widget.winfo_children():
+                bind_mousewheel(child)
+        
+        # Bind iniziale
         self.canvas.bind("<MouseWheel>", on_mousewheel)
-        self.content_frame.bind("<MouseWheel>", on_mousewheel)
+        self.canvas.bind("<Button-4>", lambda e: (self.canvas.yview_scroll(-1, "units"), "break"))
+        self.canvas.bind("<Button-5>", lambda e: (self.canvas.yview_scroll(1, "units"), "break"))
+        bind_mousewheel(self.content_frame)
+        
+        # Bind automatico per nuovi widget aggiunti
+        def on_content_configure(event):
+            self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            # Re-bind mousewheel su nuovi widget
+            bind_mousewheel(self.content_frame)
+        
+        self.content_frame.bind("<Configure>", on_content_configure)
         
         # For Linux
         self.canvas.bind("<Button-4>", lambda e: self.canvas.yview_scroll(-1, "units"))
