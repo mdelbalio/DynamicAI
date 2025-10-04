@@ -456,28 +456,27 @@ class AIDOXAApp(tk.Tk):
         )
         self.metadata_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Container per canvas + scrollbar
-        container = tk.Frame(self.metadata_frame, bg="lightgray")
-        container.pack(fill="both", expand=True)
-
-        # Canvas con larghezza minima più grande
-        canvas = tk.Canvas(container, bg="lightgray", highlightthickness=0)
-        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
-    
-        # Frame scrollabile che si espande
+        # Canvas + scrollbar
+        canvas = tk.Canvas(self.metadata_frame, bg="lightgray", highlightthickness=0)
+        scrollbar = tk.Scrollbar(self.metadata_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg="lightgray")
 
-        def on_frame_configure(event):
+        # Configura scrollregion
+        def configure_scrollregion(event=None):
             canvas.configure(scrollregion=canvas.bbox("all"))
-            # Forza il canvas a essere largo almeno quanto il frame
-            canvas_width = max(scrollable_frame.winfo_reqwidth(), 240)
-            canvas.itemconfig(canvas_window, width=canvas_width)
 
-        scrollable_frame.bind("<Configure>", on_frame_configure)
+        scrollable_frame.bind("<Configure>", configure_scrollregion)
 
-        # Crea window con anchor="nw" e width iniziale
+        # Crea window nel canvas
         canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
+
+        # CHIAVE: Ridimensiona il frame interno quando il canvas cambia dimensione
+        def on_canvas_configure(event):
+            # Forza il frame interno ad avere la stessa larghezza del canvas
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        canvas.bind("<Configure>", on_canvas_configure)
 
         self.metadata_vars = {}
         self.metadata_entries = {}
@@ -486,15 +485,9 @@ class AIDOXAApp(tk.Tk):
         # Popola con metadati correnti
         self.populate_metadata_fields(scrollable_frame)
 
-        # Pack canvas e scrollbar
+        # Pack
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-
-        # Bind per adattare larghezza quando il canvas cambia
-        def on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-    
-        canvas.bind("<Configure>", on_canvas_configure)
 
         # Scroll con rotellina
         def on_metadata_mousewheel(event):
