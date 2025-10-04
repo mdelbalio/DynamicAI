@@ -409,7 +409,7 @@ class AIDOXAApp(tk.Tk):
         # Page info
         self.page_info_label = tk.Label(self.right_panel, text="", 
                                        font=("Arial", 10), bg="lightgray")
-        self.page_info_label.pack(pady=10)
+        self.page_info_label.pack(pady=2)
 
         # NUOVO: Metadata frame
         self.setup_metadata_controls()
@@ -454,12 +454,17 @@ class AIDOXAApp(tk.Tk):
             font=("Arial", 10, "bold"), bg="lightgray",
             relief="ridge", bd=2
         )
-        self.metadata_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.metadata_frame.pack(fill="both", expand=True, padx=10, pady=(2, 10))
 
-        # Canvas + scrollbar
-        canvas = tk.Canvas(self.metadata_frame, bg="lightgray", highlightthickness=0)
-        scrollbar = tk.Scrollbar(self.metadata_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg="lightgray")
+        # Canvas + scrollbar con frame container
+        container = tk.Frame(self.metadata_frame, bg="lightgray")
+        container.pack(fill="both", expand=True)
+
+        # IMPORTANTE: Crea PRIMA il canvas
+        canvas = tk.Canvas(container, bg="lightgray", highlightthickness=0)
+        # POI crea la scrollbar che riferisce a canvas.yview
+        scrollable_frame = tk.Frame(canvas, bg="lightgray")        
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
 
         # Configura scrollregion
         def configure_scrollregion(event=None):
@@ -471,9 +476,8 @@ class AIDOXAApp(tk.Tk):
         canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # CHIAVE: Ridimensiona il frame interno quando il canvas cambia dimensione
+        # Ridimensiona frame interno quando canvas cambia
         def on_canvas_configure(event):
-            # Forza il frame interno ad avere la stessa larghezza del canvas
             canvas.itemconfig(canvas_window, width=event.width)
 
         canvas.bind("<Configure>", on_canvas_configure)
@@ -482,22 +486,78 @@ class AIDOXAApp(tk.Tk):
         self.metadata_entries = {}
         self.scrollable_metadata_frame = scrollable_frame
 
-        # Popola con metadati correnti
+        # Popola metadati
         self.populate_metadata_fields(scrollable_frame)
 
-        # Pack
-        canvas.pack(side="left", fill="both", expand=True)
+        # Pack: scrollbar a destra, canvas a sinistra
         scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
 
-        # Scroll con rotellina
+        # Scroll con rotella - bind migliorato
         def on_metadata_mousewheel(event):
-            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            return "break"
 
+        # Bind su canvas
         canvas.bind("<MouseWheel>", on_metadata_mousewheel)
+        canvas.bind("<Button-4>", lambda e: (canvas.yview_scroll(-1, "units"), "break"))
+        canvas.bind("<Button-5>", lambda e: (canvas.yview_scroll(1, "units"), "break"))
+    
+        # Bind su scrollable_frame
         scrollable_frame.bind("<MouseWheel>", on_metadata_mousewheel)
+        scrollable_frame.bind("<Button-4>", lambda e: (canvas.yview_scroll(-1, "units"), "break"))
+        scrollable_frame.bind("<Button-5>", lambda e: (canvas.yview_scroll(1, "units"), "break"))
+    
+        # Bind ricorsivo su widget figli (labels, entries)
+        def bind_to_mousewheel(widget):
+            widget.bind("<MouseWheel>", on_metadata_mousewheel)
+            widget.bind("<Button-4>", lambda e: (canvas.yview_scroll(-1, "units"), "break"))
+            widget.bind("<Button-5>", lambda e: (canvas.yview_scroll(1, "units"), "break"))
+            for child in widget.winfo_children():
+                bind_to_mousewheel(child)
+    
+        # Applica binding dopo creazione widgets
+        self.after(100, lambda: bind_to_mousewheel(scrollable_frame))
+
+    def scroll_to_widget(self, widget):
+        """Scroll canvas to make widget visible when it gets focus"""
+        try:
+            # Trova il canvas dei metadati
+            canvas = None
+            parent = widget.master
+            while parent:
+                if isinstance(parent, tk.Canvas):
+                    canvas = parent
+                    break
+                parent = parent.master
+        
+            if not canvas:
+                return
+        
+            # Calcola posizione del widget
+            widget.update_idletasks()
+            widget_y = widget.winfo_rooty()
+            canvas_y = canvas.winfo_rooty()
+            canvas_height = canvas.winfo_height()
+        
+            relative_y = widget_y - canvas_y
+        
+            # Se il widget è fuori dalla vista, scrolla
+            if relative_y < 0 or relative_y > canvas_height - 50:
+                # Calcola frazione di scroll necessaria
+                scrollregion = canvas.cget('scrollregion').split()
+                if len(scrollregion) == 4:
+                    total_height = float(scrollregion[3])
+                    if total_height > 0:
+                        # Centra il widget nella vista
+                        target_y = widget.winfo_y() - (canvas_height / 2) + (widget.winfo_height() / 2)
+                        fraction = max(0, min(1, target_y / total_height))
+                        canvas.yview_moveto(fraction)
+        except Exception as e:
+            self.debug_print(f"Error scrolling to widget: {e}")
 
     def populate_metadata_fields(self, parent_frame):
-        """Populate metadata fields dynamically from current header_metadata - RESPONSIVE"""
+        """Populate metadata fields dynamically from current header_metadata - RESPONSIVE with auto-scroll"""
         # Clear existing widgets
         for widget in parent_frame.winfo_children():
             widget.destroy()
@@ -520,19 +580,24 @@ class AIDOXAApp(tk.Tk):
                 parent_frame, textvariable=self.metadata_vars[field],
                 font=("Arial", 9), bg="white"
             )
-            # CAMBIATO: sticky="ew" fa espandere l'entry in orizzontale
             entry.grid(row=row+1, column=0, sticky="ew", padx=5, pady=(0, 5), ipady=3)
             self.metadata_entries[field] = entry
 
             # Bind per auto-save
             self.metadata_vars[field].trace('w', lambda *args, f=field: self.on_metadata_changed(f))
 
+            # Auto-scroll quando si entra nel campo con Tab/Click
+            def on_entry_focus(event, entry_widget=entry):
+                self.scroll_to_widget(entry_widget)
+        
+            entry.bind("<FocusIn>", on_entry_focus)
+
             row += 2
 
-        # IMPORTANTE: Configura colonna per espandersi
+        # Configura colonna per espandersi
         parent_frame.grid_columnconfigure(0, weight=1)
     
-        # AGGIUNTO: Forza update del layout
+        # Forza update del layout
         parent_frame.update_idletasks()
 
     def setup_instructions_area(self):
