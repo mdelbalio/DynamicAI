@@ -443,20 +443,22 @@ class AIDOXAApp(tk.Tk):
         self.category_combo.bind("<<ComboboxSelected>>", self.on_category_changed)
         self.category_combo.bind("<Return>", self.on_category_enter)
     
-    
-    
     def setup_metadata_controls(self):
-        """Setup metadata editing controls - larghezza uniforme con Categoria Documento"""
-        metadata_frame = tk.LabelFrame(
+        """Setup metadata editing controls - completely dynamic based on JSON"""
+        # Rimuovi frame esistente se presente
+        if hasattr(self, 'metadata_frame'):
+            self.metadata_frame.destroy()
+    
+        self.metadata_frame = tk.LabelFrame(
             self.right_panel, text="Metadati Documento",
             font=("Arial", 10, "bold"), bg="lightgray",
             relief="ridge", bd=2
         )
-        metadata_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.metadata_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Canvas + scrollbar per rendere scrollabile
-        canvas = tk.Canvas(metadata_frame, bg="lightgray", highlightthickness=0)
-        scrollbar = tk.Scrollbar(metadata_frame, orient="vertical", command=canvas.yview)
+        # Canvas + scrollbar per scrolling
+        canvas = tk.Canvas(self.metadata_frame, bg="lightgray", highlightthickness=0)
+        scrollbar = tk.Scrollbar(self.metadata_frame, orient="vertical", command=canvas.yview)
         scrollable_frame = tk.Frame(canvas, bg="lightgray")
 
         scrollable_frame.bind(
@@ -469,63 +471,55 @@ class AIDOXAApp(tk.Tk):
 
         self.metadata_vars = {}
         self.metadata_entries = {}
+        self.scrollable_metadata_frame = scrollable_frame  # Salva riferimento per rebuild
 
-        metadata_labels = {
-            'NumeroProgetto': 'Numero Progetto:',
-            'Intestatario': 'Intestatario:',
-            'IndirizzoImmobile': 'Indirizzo Immobile:',
-            'LavoroEseguito': 'Lavoro Eseguito:',
-            'EstremiCatastali': 'Estremi Catastali:'
-        }
-
-        row = 0
-        for field, label_text in metadata_labels.items():
-            lbl = tk.Label(
-                scrollable_frame, text=label_text,
-                font=("Arial", 9, "bold"), bg="lightgray", anchor="w"
-            )
-            lbl.grid(row=row, column=0, sticky="w", padx=5, pady=(5, 0))
-
-            self.metadata_vars[field] = tk.StringVar()
-            entry = tk.Entry(
-                scrollable_frame, textvariable=self.metadata_vars[field],
-                font=("Arial", 9), bg="white"
-            )
-            entry.grid(row=row+1, column=0, sticky="ew", padx=5, pady=(0, 5), ipady=3)
-            self.metadata_entries[field] = entry
-
-            # Bind event per salvataggio in header_metadata
-            self.metadata_vars[field].trace('w', lambda *args, f=field: self.on_metadata_changed(f))
-
-            row += 2
-
-        # Allineamento larghezza con la combobox delle categorie
-        def sync_entry_width(event=None):
-            try:
-                target_width = self.category_combo.winfo_width()
-                if target_width > 50:
-                    for entry in self.metadata_entries.values():
-                        entry.config(width=0)  # reset
-                        entry.update_idletasks()
-                        entry.configure(width=int(target_width/7))  # approx char width
-            except Exception as e:
-                self.debug_print(f"Sync entry width failed: {e}")
-
-        # Bind al resize della combobox e del pannello destro
-        self.category_combo.bind("<Configure>", sync_entry_width)
-        self.right_panel.bind("<Configure>", sync_entry_width)
+        # Popola con metadati correnti
+        self.populate_metadata_fields(scrollable_frame)
 
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
-
 
         # Scroll con rotellina
         def on_metadata_mousewheel(event):
             canvas.yview_scroll(int(-1*(event.delta/120)), "units")
 
-
         canvas.bind("<MouseWheel>", on_metadata_mousewheel)
         scrollable_frame.bind("<MouseWheel>", on_metadata_mousewheel)
+
+    def populate_metadata_fields(self, parent_frame):
+        """Populate metadata fields dynamically from current header_metadata"""
+        # Clear existing widgets
+        for widget in parent_frame.winfo_children():
+            widget.destroy()
+    
+        self.metadata_vars.clear()
+        self.metadata_entries.clear()
+
+        row = 0
+        for field, value in self.header_metadata.items():
+            # Label con nome campo
+            lbl = tk.Label(
+                parent_frame, text=f"{field}:",
+                font=("Arial", 9, "bold"), bg="lightgray", anchor="w"
+            )
+            lbl.grid(row=row, column=0, sticky="w", padx=5, pady=(5, 0))
+
+            # Entry per valore
+            self.metadata_vars[field] = tk.StringVar(value=value)
+            entry = tk.Entry(
+                parent_frame, textvariable=self.metadata_vars[field],
+                font=("Arial", 9), bg="white"
+            )
+            entry.grid(row=row+1, column=0, sticky="ew", padx=5, pady=(0, 5), ipady=3)
+            self.metadata_entries[field] = entry
+
+            # Bind per auto-save
+            self.metadata_vars[field].trace('w', lambda *args, f=field: self.on_metadata_changed(f))
+
+            row += 2
+
+        # Allineamento larghezza
+        parent_frame.grid_columnconfigure(0, weight=1)
 
     def setup_instructions_area(self):
         """Setup instructions text area"""
@@ -780,36 +774,39 @@ class AIDOXAApp(tk.Tk):
         self.category_combo['values'] = all_cats
 
     def load_metadata_from_json(self, data):
-        """Load metadata from JSON header - NUOVO"""
-        header = data.get('header', {})
-        
-        self.header_metadata['NumeroProgetto'] = header.get('NumeroProgetto', '')
-        self.header_metadata['Intestatario'] = header.get('Intestatario', '')
-        self.header_metadata['IndirizzoImmobile'] = header.get('IndirizzoImmobile', '')
-        self.header_metadata['LavoroEseguito'] = header.get('LavoroEseguito', '')
-        self.header_metadata['EstremiCatastali'] = header.get('EstremiCatastali', '')
-        
-        for field, value in self.header_metadata.items():
-            self.metadata_vars[field].set(value)
-        
-        self.debug_print(f"Loaded metadata: {self.header_metadata}")
+        """Load metadata from JSON header - completely dynamic"""
+        header = data.get('header', data)  # Supporta sia {header: {...}} che JSON flat
+    
+        # Reset metadati
+        self.header_metadata.clear()
+    
+        # Carica tutti i campi dal JSON dinamicamente
+        for key, value in header.items():
+            # Converti None in stringa vuota
+            self.header_metadata[key] = str(value) if value is not None else ''
+    
+        # Rebuild UI metadati
+        if hasattr(self, 'scrollable_metadata_frame'):
+            self.populate_metadata_fields(self.scrollable_metadata_frame)
+    
+        self.debug_print(f"Loaded {len(self.header_metadata)} metadata fields: {list(self.header_metadata.keys())}")
 
     # Document loading and management
     def refresh_document_list(self):
-        """Load document from configured input folder - MODIFICATO"""
+        """Load document from configured input folder - supports both modes"""
         input_folder = self.config_manager.get('default_input_folder', '')
-        
+    
         if not input_folder or not os.path.exists(input_folder):
             messagebox.showerror("Errore", 
-                               "Cartella input non configurata o non esistente.\n"
-                               "Configura la cartella nelle Preferenze.")
+                            "Cartella input non configurata o non esistente.\n"
+                            "Configura la cartella nelle Preferenze.")
             return
 
         self.input_folder_name = os.path.basename(os.path.normpath(input_folder))
 
         json_file = None
         doc_file = None
-        
+    
         for file in os.listdir(input_folder):
             if file.lower().endswith('.json'):
                 json_file = os.path.join(input_folder, file)
@@ -818,33 +815,46 @@ class AIDOXAApp(tk.Tk):
 
         if not json_file or not doc_file:
             messagebox.showerror("Errore", 
-                               "Cartella input deve contenere un file JSON e un documento PDF/TIFF")
+                           "Cartella input deve contenere un file JSON e un documento PDF/TIFF")
             return
 
         try:
             with open(json_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self.original_data = data
-            
+        
+            # Carica metadati (dinamici)
             self.load_metadata_from_json(data)
-            
-            categories = data.get("categories", [])
-
+        
+            # Determina modalità
+            has_categories = 'categories' in data and isinstance(data['categories'], list)
+            split_enabled = self.config_manager.get('split_documents_by_category', True)
+        
             self.current_document_name = os.path.splitext(os.path.basename(doc_file))[0]
-
-            self.all_categories = set(cat['categoria'] for cat in categories if cat['categoria'] != "Pagina vuota")
-            
-            self.update_category_combo()
-
+        
+            # Carica documento
             self.load_document(doc_file)
-            self.build_document_groups(categories)
-            
-            self.update_document_instructions(json_file, doc_file, input_folder, categories)
-            
-            self.debug_print(f"Document loaded: {len(categories)} categories, {len(self.documentgroups)} documents")
-            
+        
+            if has_categories and split_enabled:
+                # MODALITÀ 1: Dividi in documenti multipli
+                categories = data['categories']
+                self.all_categories = set(cat['categoria'] for cat in categories if cat['categoria'] != "Pagina vuota")
+                self.update_category_combo()
+                self.build_document_groups(categories)
+                self.debug_print(f"Mode: SPLIT - {len(categories)} categories, {len(self.documentgroups)} documents")
+            else:
+                # MODALITÀ 2: Documento unico con tutte le pagine
+                self.all_categories = set()
+                self.update_category_combo()
+                self.build_single_document()
+                self.debug_print(f"Mode: SINGLE DOCUMENT - {self.documentloader.totalpages} pages")
+        
+            self.debug_print(f"Document loaded with {len(self.header_metadata)} metadata fields")
+        
         except Exception as e:
             messagebox.showerror("Errore", f"Errore nel caricamento: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def load_document(self, doc_path: str):
         """Load PDF or TIFF document"""
@@ -906,6 +916,34 @@ class AIDOXAApp(tk.Tk):
         
         self.updating_ui = False
         self.debug_print(f"Created {len(documents)} document groups with grid layout")
+
+    def build_single_document(self):
+        """Build single document group with all pages (no category splitting)"""
+        if self.updating_ui:
+            return
+        self.updating_ui = True
+
+        # Clear existing groups
+        for group in self.documentgroups:
+            group.destroy()
+        self.documentgroups.clear()
+
+        # Crea documento unico
+        document_name = self.input_folder_name or "Documento"
+        group = DocumentGroup(self.content_frame, document_name, self, 1)
+    
+        # Aggiungi tutte le pagine
+        for pagenum in range(1, self.documentloader.totalpages + 1):
+            img = self.documentloader.get_page(pagenum)
+            if img:
+                group.add_page(pagenum, img)
+    
+        group.pack(pady=5, fill="x", padx=5)
+        self.documentgroups.append(group)
+
+        self.after_idle(self.update_scroll_region)
+        self.updating_ui = False
+        self.debug_print(f"Created single document with {self.documentloader.totalpages} pages")
 
     def update_scroll_region(self):
         """Update scroll region for document groups"""
@@ -1059,16 +1097,15 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.debug_print("Workspace reset completed")
         
     def export_csv_metadata(self, output_folder: str, exported_files: List[str]) -> str:
-        """Export CSV file with metadata - respects file handling settings"""
+        """Export CSV file with dynamic metadata - respects file handling settings"""
         csv_filename = f"{self.input_folder_name}.csv"
         csv_path = os.path.join(output_folder, csv_filename)
-        
-        # Check if CSV already exists and handle according to settings
+    
+        # Check file esistente
         if os.path.exists(csv_path):
             file_handling_mode = self.config_manager.get('file_handling_mode', 'auto_rename')
-            
+        
             if file_handling_mode == 'ask_overwrite':
-                # Ask user what to do
                 response = messagebox.askyesnocancel(
                     "File CSV Esistente",
                     f"Il file CSV '{csv_filename}' esiste già.\n\n"
@@ -1076,84 +1113,63 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                     "No = Rinomina automaticamente\n"
                     "Annulla = Salta creazione CSV"
                 )
-                
-                if response is None:  # Cancel
+            
+                if response is None:
                     self.debug_print("CSV export cancelled by user")
                     return ""
-                elif response is False:  # No - rename
+                elif response is False:
                     csv_path = self._get_unique_csv_filename(output_folder, csv_filename)
                     csv_filename = os.path.basename(csv_path)
-                # If Yes (True), keep original path and overwrite
                 
             elif file_handling_mode == 'auto_rename':
-                # Auto rename to avoid overwriting
                 csv_path = self._get_unique_csv_filename(output_folder, csv_filename)
                 csv_filename = os.path.basename(csv_path)
                 self.debug_print(f"CSV renamed to: {csv_filename}")
-                
-            # else: 'always_overwrite' - do nothing, keep original path
-        
+    
         delimiter = self.config_manager.get('csv_delimiter', ';')
-        
+    
         try:
             with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
                 writer = csv.writer(csvfile, delimiter=delimiter)
-                
-                writer.writerow([
-                    'Nome File',
-                    'Categoria',
-                    'NumeroProgetto',
-                    'Intestatario',
-                    'IndirizzoImmobile',
-                    'LavoroEseguito',
-                    'EstremiCatastali'
-                ])
-                
+            
+                # Header dinamico: Nome File + Categoria + tutti i metadati
+                header_row = ['Nome File', 'Categoria'] + list(self.header_metadata.keys())
+                writer.writerow(header_row)
+            
                 export_format = self.config_manager.get('export_format', 'JPEG')
-                
+            
                 if export_format in ['PDF_MULTI', 'TIFF_MULTI']:
+                    # Export multipagina
                     for doc_index, group in enumerate(self.documentgroups, 1):
                         if not group.thumbnails:
                             continue
-                        
+                    
                         safe_category = self.export_manager.sanitize_filename(group.categoryname)
                         matching_files = [f for f in exported_files if f'_doc{doc_index:03d}_{safe_category}' in f]
-                        
+                    
                         if matching_files:
                             filename = matching_files[0]
                         else:
                             ext = '.pdf' if 'PDF' in export_format else '.tiff'
                             filename = f"{self.current_document_name}_doc{doc_index:03d}_{safe_category}{ext}"
-                        
-                        writer.writerow([
-                            filename,
-                            group.categoryname,
-                            self.header_metadata['NumeroProgetto'],
-                            self.header_metadata['Intestatario'],
-                            self.header_metadata['IndirizzoImmobile'],
-                            self.header_metadata['LavoroEseguito'],
-                            self.header_metadata['EstremiCatastali']
-                        ])
+                    
+                        # Riga dinamica
+                        row = [filename, group.categoryname] + [self.header_metadata.get(k, '') for k in self.header_metadata.keys()]
+                        writer.writerow(row)
                 else:
+                    # Export pagina singola
                     file_index = 0
                     for group in self.documentgroups:
                         for thumbnail in group.thumbnails:
                             if file_index < len(exported_files):
                                 filename = exported_files[file_index]
-                                writer.writerow([
-                                    filename,
-                                    group.categoryname,
-                                    self.header_metadata['NumeroProgetto'],
-                                    self.header_metadata['Intestatario'],
-                                    self.header_metadata['IndirizzoImmobile'],
-                                    self.header_metadata['LavoroEseguito'],
-                                    self.header_metadata['EstremiCatastali']
-                                ])
+                                row = [filename, group.categoryname] + [self.header_metadata.get(k, '') for k in self.header_metadata.keys()]
+                                writer.writerow(row)
                                 file_index += 1
-            
-            self.debug_print(f"CSV exported: {csv_path}")
+        
+            self.debug_print(f"CSV exported with {len(self.header_metadata)} metadata columns: {csv_path}")
             return csv_filename
-            
+        
         except Exception as e:
             self.debug_print(f"Error exporting CSV: {e}")
             raise

@@ -70,6 +70,7 @@ DEFAULT_CONFIG = {
     
     # ---- NUOVO: Batch Manager ----
     'batch_mode_enabled': True,
+    'split_documents_by_category': True,  # NUOVO: Flag per dividere documenti per categoria
 
     'application_info': {
         'name': 'DynamicAI Editor',

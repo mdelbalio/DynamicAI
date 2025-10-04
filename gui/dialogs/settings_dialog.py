@@ -351,6 +351,25 @@ Workflow supportati:
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="Avanzate")
         
+        # NUOVO: Split documents by category
+        tk.Label(frame, text="Gestione Documenti:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        self.split_by_category_var = tk.BooleanVar(
+            value=self.config_manager.config_data.get('split_documents_by_category', True))
+        ttk.Checkbutton(frame, text="Dividi documenti per categoria (se presente campo 'categories' in JSON)",
+                       variable=self.split_by_category_var).pack(anchor="w", padx=20, pady=5)
+        
+        tk.Label(frame, text="Se disabilitato, crea un singolo documento con tutte le pagine",
+                font=("Arial", 8), fg="gray").pack(anchor="w", padx=40, pady=(0, 10))
+        
+        # Separator
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=10, padx=10)
+        
+        # Existing checkboxes remain below
+        tk.Label(frame, text="Preferenze Generali:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+    
         # Auto-save
         self.auto_save_var = tk.BooleanVar(
             value=self.config_manager.config_data.get('auto_save_changes', True))
