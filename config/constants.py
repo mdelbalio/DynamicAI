@@ -61,6 +61,8 @@ DEFAULT_CONFIG = {
     'csv_delimiter': ';',
     'csv_mode': 'incremental',  # incremental | per_file
     'csv_output_path': '',  # Se vuoto, usa output_folder
+    'csv_use_document_name': False,  # Se True, usa nome documento invece di cartella
+    'csv_custom_name': '',  # Nome personalizzato (se vuoto, usa auto)
     
     # ---- NUOVO: Percorsi input ----
     'default_input_folder': '',

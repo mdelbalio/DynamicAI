@@ -314,6 +314,32 @@ class SettingsDialog:
                  command=lambda: self.browse_folder('csv_output_path')).pack(
             side="right", padx=(5, 0))
         
+        # Nome file CSV
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=15, padx=10)
+        
+        tk.Label(frame, text="Nome File CSV:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=5)
+        
+        # Checkbox - Usa nome documento
+        self.csv_use_doc_name_var = tk.BooleanVar(
+            value=self.config_manager.config_data.get('csv_use_document_name', False))
+        ttk.Checkbutton(frame, text="Usa nome file documento (invece di nome cartella)",
+                       variable=self.csv_use_doc_name_var).pack(anchor="w", padx=20, pady=5)
+        
+        # Nome personalizzato
+        custom_name_frame = tk.Frame(frame)
+        custom_name_frame.pack(fill="x", padx=20, pady=5)
+        
+        tk.Label(custom_name_frame, text="Nome personalizzato:").pack(side="left")
+        self.csv_custom_name_var = tk.StringVar(
+            value=self.config_manager.config_data.get('csv_custom_name', ''))
+        tk.Entry(custom_name_frame, textvariable=self.csv_custom_name_var,
+                width=30).pack(side="left", padx=(5, 0))
+        
+        # Help label
+        tk.Label(frame, text="(Lascia vuoto per nome automatico. Nome personalizzato ha priorità)",
+                font=("Arial", 8), fg="gray").pack(anchor="w", padx=20, pady=(0, 5))
+        
     def create_batch_tab(self):
         """Tab Batch (NUOVO)"""
         frame = ttk.Frame(self.notebook)
@@ -476,6 +502,8 @@ Workflow supportati:
         self.config_manager.config_data['csv_mode'] = self.csv_mode_var.get()
         self.config_manager.config_data['csv_delimiter'] = self.csv_delimiter_var.get()
         self.config_manager.config_data['csv_output_path'] = self.csv_output_var.get()
+        self.config_manager.config_data['csv_use_document_name'] = self.csv_use_doc_name_var.get()
+        self.config_manager.config_data['csv_custom_name'] = self.csv_custom_name_var.get().strip()
         
         # Batch
         self.config_manager.config_data['batch_mode_enabled'] = self.batch_enabled_var.get()

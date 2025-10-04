@@ -1177,7 +1177,20 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         
     def export_csv_metadata(self, output_folder: str, exported_files: List[str]) -> str:
         """Export CSV file with dynamic metadata - respects file handling settings"""
-        csv_filename = f"{self.input_folder_name}.csv"
+        # Logica nome file CSV - Priorità: Custom > Documento > Cartella
+        custom_name = self.config_manager.get('csv_custom_name', '').strip()
+        use_doc_name = self.config_manager.get('csv_use_document_name', False)
+        
+        if custom_name:
+            # Priorità 1: Nome personalizzato
+            csv_filename = f"{custom_name}.csv"
+        elif use_doc_name and self.current_document_name:
+            # Priorità 2: Nome documento
+            csv_filename = f"{self.current_document_name}.csv"
+        else:
+            # Priorità 3: Nome cartella (default)
+            csv_filename = f"{self.input_folder_name}.csv"
+        
         csv_path = os.path.join(output_folder, csv_filename)
     
         # Check file esistente
