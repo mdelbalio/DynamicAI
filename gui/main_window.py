@@ -152,7 +152,105 @@ class AIDOXAApp(tk.Tk):
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Aiuto", menu=help_menu)
         help_menu.add_command(label="Istruzioni", command=lambda: show_help_dialog(self))
+        help_menu.add_command(label="Mostra Info Documento", command=self.show_document_info_dialog)  # NUOVO
+        help_menu.add_separator()
         help_menu.add_command(label="Informazioni", command=lambda: show_about_dialog(self))
+        
+    def show_document_info_dialog(self):
+        """Show document information in a dialog"""
+        if not self.documentgroups:
+            messagebox.showinfo("Informazioni Documento", 
+                              "Nessun documento caricato.\n\n"
+                              "Usa 'Aggiorna Lista (Preview)' per caricare un documento.")
+            return
+    
+        # Crea finestra dialog
+        info_dialog = tk.Toplevel(self)
+        info_dialog.title("Informazioni Documento Corrente")
+        info_dialog.geometry("600x500")
+        info_dialog.transient(self)
+    
+        # Text widget scrollabile
+        text_frame = tk.Frame(info_dialog)
+        text_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    
+        scrollbar = tk.Scrollbar(text_frame)
+        scrollbar.pack(side="right", fill="y")
+    
+        text_widget = tk.Text(text_frame, wrap="word", yscrollcommand=scrollbar.set,
+                             font=("Consolas", 9))
+        text_widget.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=text_widget.yview)
+    
+        # Genera info
+        info = self.generate_document_info()
+        text_widget.insert("1.0", info)
+        text_widget.config(state="disabled")
+    
+        # Bottone chiudi
+        tk.Button(info_dialog, text="Chiudi", command=info_dialog.destroy,
+                 bg="lightgray", font=("Arial", 10)).pack(pady=10)
+
+    def generate_document_info(self):
+        """Generate document information text"""
+        if not self.documentgroups:
+            return "Nessun documento caricato"
+    
+        export_format = self.config_manager.get('export_format', 'JPEG')
+        format_display = {
+            'JPEG': 'JPEG',
+            'PDF_SINGLE': 'PDF (pagina singola)',
+            'PDF_MULTI': 'PDF (multipagina per documento)',
+            'TIFF_SINGLE': 'TIFF (pagina singola)',
+            'TIFF_MULTI': 'TIFF (multipagina per documento)'
+        }.get(export_format, export_format)
+    
+        file_handling_mode = self.config_manager.get('file_handling_mode', 'auto_rename')
+        file_handling_display = {
+            'auto_rename': 'Rinomina automaticamente',
+            'ask_overwrite': 'Chiedi conferma',
+            'always_overwrite': 'Sovrascrivi sempre'
+        }.get(file_handling_mode, file_handling_mode)
+    
+        db_categories_count = len(self.category_db.get_all_categories())
+    
+        grid_info = ""
+        for i, group in enumerate(self.documentgroups):
+            page_count = group.get_page_count()
+            group_info = group.get_info()
+            grid_rows = group_info.get('grid_rows', 0)
+            per_row = group_info.get('thumbnails_per_row', 4)
+            if page_count > 0:
+                grid_info += f"  Doc {i+1}: {page_count} pagine ({grid_rows} righe, {per_row}/riga)\n"
+    
+        metadata_info = "\n".join([f"  {k}: {v}" for k, v in self.header_metadata.items() if v])
+    
+        info = f"""DOCUMENTO CARICATO:
+
+    Documento: {self.current_document_name}
+    Nome CSV Export: {self.input_folder_name}.csv
+
+    METADATI HEADER:
+    {metadata_info if metadata_info else "  Nessun metadato"}
+
+    Categorie JSON: {len(self.all_categories)}
+    Categorie Database: {db_categories_count}
+    Documenti: {len(self.documentgroups)}
+    Pagine totali: {self.documentloader.totalpages if self.documentloader else 0}
+
+    LAYOUT A GRIGLIA MULTI-RIGA:
+    {grid_info}
+
+    EXPORT:
+    Formato: {format_display}
+    Qualità JPEG: {self.config_manager.get('jpeg_quality', 95)}%
+    File esistenti: {file_handling_display}
+    CSV: Generato automaticamente con metadati
+
+    Usa Menu → Aiuto → Istruzioni per dettagli completi.
+    """
+    
+        return info
 
     def create_widgets(self):
         """Create main application widgets"""
@@ -317,7 +415,7 @@ class AIDOXAApp(tk.Tk):
         self.setup_metadata_controls()
 
         # Instructions text area
-        self.setup_instructions_area()
+        # self.setup_instructions_area()
 
     def setup_category_controls(self):
         """Setup category selection controls"""
@@ -454,9 +552,9 @@ class AIDOXAApp(tk.Tk):
         
         # Window events
         # if self.config_manager.get('save_window_layout', True):
-        #   self.bind('<Configure>', self.on_window_configure)
-        #   self.bind_all('<B1-Motion>', self.on_paned_motion)
-        #   self.bind_all('<ButtonRelease-1>', self.on_paned_release)
+        #    self.bind('<Configure>', self.on_window_configure)
+        #    self.bind_all('<B1-Motion>', self.on_paned_motion)
+        #    self.bind_all('<ButtonRelease-1>', self.on_paned_release)
         
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
@@ -586,8 +684,9 @@ class AIDOXAApp(tk.Tk):
 
     def update_instructions(self, text: str):
         """Update instructions text area"""
-        self.instructions_text.delete("1.0", tk.END)
-        self.instructions_text.insert(tk.END, text)
+        if hasattr(self, 'instructions_text'):
+            self.instructions_text.delete("1.0", tk.END)
+            self.instructions_text.insert(tk.END, text)
 
     # Menu handlers
     def open_settings(self):
@@ -872,7 +971,8 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         """
         
         self.update_instructions(instructions)
-
+    
+    # inserire qui def complete_sequence
     def complete_sequence_export(self):
         """Export images and CSV to configured output folder"""
         if not self.documentgroups:
@@ -896,7 +996,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
 
         try:
             export_format = self.config_manager.get('export_format', 'JPEG')
-            
             progress_window, progress_var, _ = create_progress_dialog(self, f"Export in formato {export_format}...")
             
             def progress_callback(message):
@@ -910,7 +1009,6 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             progress_var.set("Generazione CSV...")
             progress_window.update()
             csv_filename = self.export_csv_metadata(output_folder, exported_files)
-            
             progress_window.destroy()
             
             summary_message = f"Export completato!\n\n"
@@ -923,17 +1021,43 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             
             messagebox.showinfo("Export Completato", summary_message)
             
+            if messagebox.askyesno("Reset Workspace", "Export completato!\n\nVuoi resettare il workspace per un nuovo documento?"):
+                self.reset_workspace()
+                
             self.config_manager.set('last_folder', output_folder)
             if self.config_manager.get('auto_save_changes', True):
                 self.save_config()
-                
             self.debug_print(f"Exported {len(exported_files)} files and CSV to {output_folder}")
             
         except Exception as e:
             if 'progress_window' in locals():
                 progress_window.destroy()
             messagebox.showerror("Errore", f"Errore durante l'export: {str(e)}")
-
+    
+    def reset_workspace(self):
+        """Reset workspace after export"""
+        for group in self.documentgroups:
+            group.destroy()
+        self.documentgroups.clear()
+        self.documentloader = None
+        self.original_data = None
+        self.current_document_name = ""
+        self.all_categories = set()
+        self.input_folder_name = ""
+        for field in self.header_metadata:
+            self.header_metadata[field] = ''
+            if field in self.metadata_vars:
+                self.metadata_vars[field].set('')
+        self.selected_thumbnail = None
+        self.selected_group = None
+        self.selection_info.config(text="Nessuna selezione")
+        self.page_info_label.config(text="")
+        self.category_var.set("")
+        self.image_canvas.delete("all")
+        self.current_image = None
+        self.after_idle(self.update_scroll_region)
+        self.debug_print("Workspace reset completed")
+        
     def export_csv_metadata(self, output_folder: str, exported_files: List[str]) -> str:
         """Export CSV file with metadata - respects file handling settings"""
         csv_filename = f"{self.input_folder_name}.csv"
