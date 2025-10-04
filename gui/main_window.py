@@ -279,23 +279,86 @@ class AIDOXAApp(tk.Tk):
                               font=("Arial", 12, "bold"), bg="lightgray")
         header_left.pack(pady=10)
 
-        # Action buttons - vertically stacked
+        # Action buttons - modern style with padding
         button_frame = tk.Frame(self.left_panel, bg="lightgray")
-        button_frame.pack(pady=5)
+        button_frame.pack(pady=10, padx=10, fill="x")
         
-        btn_refresh = tk.Button(button_frame, text="Aggiorna Lista (Preview)", 
-                               command=self.refresh_document_list, 
-                               bg="lightblue", font=("Arial", 10, "bold"), width=25)
-        btn_refresh.pack(pady=2)
+        # Refresh button
+        btn_refresh = tk.Button(
+            button_frame, 
+            text="↻ Carica Documento",
+            command=self.refresh_document_list, 
+            bg="#4A90E2", 
+            fg="white",
+            font=("Arial", 11, "bold"), 
+            relief="flat",
+            cursor="hand2",
+            activebackground="#357ABD",
+            activeforeground="white",
+            bd=0,
+            padx=20,
+            pady=12
+        )
+        btn_refresh.pack(fill="x", pady=(0, 8))
 
-        btn_export = tk.Button(button_frame, text="Completa Sequenza / Export", 
-                              command=self.complete_sequence_export, 
-                              bg="lightgreen", font=("Arial", 10, "bold"), width=25)
-        btn_export.pack(pady=2)
-        btn_reset = tk.Button(button_frame, text="Rimuovi Documenti Caricati", 
-                             command=self.reset_workspace, 
-                             bg="lightcoral", font=("Arial", 10, "bold"), width=25)
-        btn_reset.pack(pady=2)
+        # Export button
+        btn_export = tk.Button(
+            button_frame, 
+            text="✓ Esporta Documenti",
+            command=self.complete_sequence_export, 
+            bg="#50C878",
+            fg="white",
+            font=("Arial", 11, "bold"),
+            relief="flat",
+            cursor="hand2",
+            activebackground="#3EA65E",
+            activeforeground="white",
+            bd=0,
+            padx=20,
+            pady=12
+        )
+        btn_export.pack(fill="x", pady=(0, 8))
+
+        # Reset button
+        btn_reset = tk.Button(
+            button_frame, 
+            text="✕ Rimuovi Documenti",
+            command=self.reset_workspace, 
+            bg="#E74C3C",
+            fg="white",
+            font=("Arial", 11, "bold"),
+            relief="flat",
+            cursor="hand2",
+            activebackground="#C0392B",
+            activeforeground="white",
+            bd=0,
+            padx=20,
+            pady=12
+        )
+        btn_reset.pack(fill="x", pady=(0, 8))
+        
+        # Add hover effects
+        def on_enter_refresh(e):
+            btn_refresh.config(bg="#357ABD")
+        def on_leave_refresh(e):
+            btn_refresh.config(bg="#4A90E2")
+            
+        def on_enter_export(e):
+            btn_export.config(bg="#3EA65E")
+        def on_leave_export(e):
+            btn_export.config(bg="#50C878")
+            
+        def on_enter_reset(e):
+            btn_reset.config(bg="#C0392B")
+        def on_leave_reset(e):
+            btn_reset.config(bg="#E74C3C")
+        
+        btn_refresh.bind("<Enter>", on_enter_refresh)
+        btn_refresh.bind("<Leave>", on_leave_refresh)
+        btn_export.bind("<Enter>", on_enter_export)
+        btn_export.bind("<Leave>", on_leave_export)
+        btn_reset.bind("<Enter>", on_enter_reset)
+        btn_reset.bind("<Leave>", on_leave_reset)
 
         # Scroll frame for documents
         self.setup_document_scroll_area()
