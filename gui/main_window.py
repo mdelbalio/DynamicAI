@@ -449,24 +449,73 @@ class AIDOXAApp(tk.Tk):
         self.bind_image_events()
     def setup_zoom_controls(self):
         """Setup zoom control buttons"""
-        zoom_frame = tk.Frame(self.center_panel, bg="darkgray", height=50)
+        zoom_frame = tk.Frame(self.center_panel, bg="#2C3E50", height=50)
         zoom_frame.pack(side="bottom", fill="x", padx=2, pady=2)
         zoom_frame.pack_propagate(False)
-
-        tk.Button(zoom_frame, text="Zoom +", command=self.zoom_in, 
-                 bg="orange", font=("Arial", 9)).pack(side="left", padx=2)
-        tk.Button(zoom_frame, text="Zoom -", command=self.zoom_out, 
-                 bg="orange", font=("Arial", 9)).pack(side="left", padx=2)
-        tk.Button(zoom_frame, text="Fit", command=self.zoom_fit, 
-                 bg="yellow", font=("Arial", 9)).pack(side="left", padx=2)
-        tk.Button(zoom_frame, text="Zoom Area", command=self.toggle_zoom_area, 
-                 bg="lightgreen", font=("Arial", 9)).pack(side="left", padx=2)
-        tk.Button(zoom_frame, text="Pan", command=self.toggle_pan_mode, 
-                 bg="lightblue", font=("Arial", 9)).pack(side="left", padx=2)
-
+        
+        # Container per pulsanti centrati
+        btn_container = tk.Frame(zoom_frame, bg="#2C3E50")
+        btn_container.pack(side="left", padx=10, pady=5)
+        
+        # State tracking per pulsanti toggle
+        self.zoom_area_active = False
+        self.pan_active = False
+        
+        # Zoom In button
+        self.btn_zoom_in = tk.Button(
+            btn_container, text="🔍+", command=self.zoom_in,
+            bg="#3498DB", fg="white", font=("Arial", 10, "bold"),
+            relief="flat", cursor="hand2", bd=0, padx=10, pady=5
+        )
+        self.btn_zoom_in.pack(side="left", padx=2)
+        
+        # Zoom Out button
+        self.btn_zoom_out = tk.Button(
+            btn_container, text="🔍-", command=self.zoom_out,
+            bg="#3498DB", fg="white", font=("Arial", 10, "bold"),
+            relief="flat", cursor="hand2", bd=0, padx=10, pady=5
+        )
+        self.btn_zoom_out.pack(side="left", padx=2)
+        
+        # Fit button
+        self.btn_fit = tk.Button(
+            btn_container, text="⊡ Fit", command=self.zoom_fit,
+            bg="#16A085", fg="white", font=("Arial", 10, "bold"),
+            relief="flat", cursor="hand2", bd=0, padx=10, pady=5
+        )
+        self.btn_fit.pack(side="left", padx=2)
+        
+        # Zoom Area button (toggle)
+        self.btn_zoom_area = tk.Button(
+            btn_container, text="⊞ Area", command=self.toggle_zoom_area,
+            bg="#7F8C8D", fg="white", font=("Arial", 10, "bold"),
+            relief="flat", cursor="hand2", bd=0, padx=10, pady=5
+        )
+        self.btn_zoom_area.pack(side="left", padx=2)
+        
+        # Pan button (toggle)
+        self.btn_pan = tk.Button(
+            btn_container, text="✋ Pan", command=self.toggle_pan_mode,
+            bg="#7F8C8D", fg="white", font=("Arial", 10, "bold"),
+            relief="flat", cursor="hand2", bd=0, padx=10, pady=5
+        )
+        self.btn_pan.pack(side="left", padx=2)
+        
         # Status label
-        self.zoom_status = tk.Label(zoom_frame, text="", bg="darkgray", fg="white", font=("Arial", 8))
-        self.zoom_status.pack(side="right", padx=10)
+        self.zoom_status = tk.Label(
+            zoom_frame, text="", bg="#2C3E50", fg="white", 
+            font=("Arial", 9)
+        )
+        self.zoom_status.pack(side="right", padx=15)
+        
+        # Hover effects
+        def create_hover(btn, color_normal, color_hover):
+            btn.bind("<Enter>", lambda e: btn.config(bg=color_hover))
+            btn.bind("<Leave>", lambda e: btn.config(bg=color_normal))
+        
+        create_hover(self.btn_zoom_in, "#3498DB", "#2980B9")
+        create_hover(self.btn_zoom_out, "#3498DB", "#2980B9")
+        create_hover(self.btn_fit, "#16A085", "#138D75")
 
     def bind_image_events(self):
         """Bind events for image canvas"""
@@ -1515,12 +1564,22 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
     def toggle_zoom_area(self):
         """Toggle zoom area selection mode"""
         self.zoom_area_mode = not self.zoom_area_mode
+        self.zoom_area_active = self.zoom_area_mode
+        
         if self.zoom_area_mode:
+            # Disattiva pan se attivo
+            if self.pan_mode:
+                self.pan_mode = False
+                self.pan_active = False
+                self.btn_pan.config(bg="#7F8C8D")
+            
             self.image_canvas.config(cursor="crosshair")
             self.zoom_status.config(text="Seleziona area per zoom")
+            self.btn_zoom_area.config(bg="#E67E22")  # Arancione attivo
         else:
             self.image_canvas.config(cursor="cross")
             self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
+            self.btn_zoom_area.config(bg="#7F8C8D")  # Grigio normale
 
     def on_image_click(self, event):
         """Handle image click - click-to-fit"""
@@ -1565,19 +1624,32 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                 self.auto_fit_on_resize = False
                 self.zoom_to_area(min(x1,x2), min(y1,y2), abs(x2-x1), abs(y2-y1))
             
+            # Disattiva zoom area mode dopo l'uso
             self.zoom_area_mode = False
+            self.zoom_area_active = False
             self.image_canvas.config(cursor="cross")
             self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
+            self.btn_zoom_area.config(bg="#7F8C8D")  # Reset colore
 
     def toggle_pan_mode(self):
         """Toggle pan mode"""
         self.pan_mode = not self.pan_mode
+        self.pan_active = self.pan_mode
+        
         if self.pan_mode:
+            # Disattiva zoom area se attivo
+            if self.zoom_area_mode:
+                self.zoom_area_mode = False
+                self.zoom_area_active = False
+                self.btn_zoom_area.config(bg="#7F8C8D")
+            
             self.image_canvas.config(cursor="fleur")
             self.zoom_status.config(text="Modalità Pan attiva")
+            self.btn_pan.config(bg="#E67E22")  # Arancione attivo
         else:
             self.image_canvas.config(cursor="cross")
             self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
+            self.btn_pan.config(bg="#7F8C8D")  # Grigio normale
 
     def on_pan_start(self, event):
         """Start canvas panning"""
@@ -1589,27 +1661,88 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         if self.pan_mode and self.current_image:
             self.image_canvas.scan_dragto(event.x, event.y, gain=1)
     def zoom_to_area(self, x: int, y: int, w: int, h: int):
-        """Zoom to specific area"""
+        """Zoom to specific area - FIXED: calcolo + centratura corretta"""
         if not self.current_image:
             return
         
         canvas_w = self.image_canvas.winfo_width()
         canvas_h = self.image_canvas.winfo_height()
+        img_w, img_h = self.current_image.size
         
-        zoom_w = canvas_w / w
-        zoom_h = canvas_h / h
-        new_zoom = min(zoom_w, zoom_h) * self.zoom_factor
+        # STEP 1: Leggi scroll offset corrente
+        scroll_x = self.image_canvas.xview()[0]
+        scroll_y = self.image_canvas.yview()[0]
         
-        center_x = x + w/2
-        center_y = y + h/2
+        # Dimensioni immagine visualizzata
+        display_w = int(img_w * self.zoom_factor)
+        display_h = int(img_h * self.zoom_factor)
         
+        # Calcola scroll offset in pixel
+        scroll_region = self.image_canvas.cget('scrollregion').split()
+        if len(scroll_region) == 4:
+            total_scroll_w = float(scroll_region[2])
+            total_scroll_h = float(scroll_region[3])
+            offset_x = scroll_x * total_scroll_w
+            offset_y = scroll_y * total_scroll_h
+        else:
+            offset_x = 0
+            offset_y = 0
+        
+        # STEP 2: Padding centratura
+        pad_x = max(0, (canvas_w - display_w) // 2)
+        pad_y = max(0, (canvas_h - display_h) // 2)
+        
+        # Coordinate assolute nell'immagine visualizzata
+        abs_x = x + offset_x - pad_x
+        abs_y = y + offset_y - pad_y
+        
+        # STEP 3: Converti in coordinate immagine originale
+        orig_x = abs_x / self.zoom_factor
+        orig_y = abs_y / self.zoom_factor
+        orig_w = w / self.zoom_factor
+        orig_h = h / self.zoom_factor
+        
+        # STEP 4: Calcola centro dell'area selezionata (nell'immagine originale)
+        center_x = orig_x + (orig_w / 2)
+        center_y = orig_y + (orig_h / 2)
+        
+        # STEP 5: Calcola nuovo zoom
+        new_zoom_w = canvas_w / orig_w
+        new_zoom_h = canvas_h / orig_h
+        new_zoom = min(new_zoom_w, new_zoom_h) * 0.90
+        
+        # STEP 6: Applica zoom
         self.zoom_factor = new_zoom
-        self.image_offset_x = canvas_w/2 - center_x * (new_zoom / self.zoom_factor)
-        self.image_offset_y = canvas_h/2 - center_y * (new_zoom / self.zoom_factor)
+        self.image_offset_x = 0
+        self.image_offset_y = 0
         
+        # STEP 7: Aggiorna display
         self.update_image_display()
+        
+        # STEP 8: CENTRA l'area selezionata nello scroll
+        # Dopo update_image_display, l'immagine è stata ridisegnata
+        # Ora dobbiamo scrollare per centrare l'area
+        new_display_w = int(img_w * new_zoom)
+        new_display_h = int(img_h * new_zoom)
+        
+        # Coordinate del centro nell'immagine zoomata
+        center_x_zoomed = center_x * new_zoom
+        center_y_zoomed = center_y * new_zoom
+        
+        # Calcola quanto scrollare per centrare
+        target_scroll_x = (center_x_zoomed - canvas_w / 2) / new_display_w
+        target_scroll_y = (center_y_zoomed - canvas_h / 2) / new_display_h
+        
+        # Limita scroll tra 0 e 1
+        target_scroll_x = max(0, min(1, target_scroll_x))
+        target_scroll_y = max(0, min(1, target_scroll_y))
+        
+        # Applica scroll
+        self.image_canvas.xview_moveto(target_scroll_x)
+        self.image_canvas.yview_moveto(target_scroll_y)
+        
         self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
-
+        
     def update_image_display(self):
         """Update the image display on canvas with scroll support"""
         if not self.current_image:
