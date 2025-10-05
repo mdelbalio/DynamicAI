@@ -280,64 +280,70 @@ class AIDOXAApp(tk.Tk):
         header_left.pack(pady=10)
 
         # Action buttons - modern style with padding
+        # Action buttons - horizontal layout with icons
         button_frame = tk.Frame(self.left_panel, bg="lightgray")
-        button_frame.pack(pady=10, padx=10, fill="x")
+        button_frame.pack(pady=10, padx=5, fill="x")
         
-        # Refresh button
+        # Configure grid columns to expand equally
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+        button_frame.columnconfigure(2, weight=1)
+        
+        # Refresh button with folder icon
         btn_refresh = tk.Button(
             button_frame, 
-            text="↻ Carica Documento",
+            text="📂\nCarica", 
             command=self.refresh_document_list, 
             bg="#4A90E2", 
             fg="white",
-            font=("Arial", 11, "bold"), 
+            font=("Arial", 9, "bold"), 
             relief="flat",
             cursor="hand2",
             activebackground="#357ABD",
             activeforeground="white",
             bd=0,
-            padx=20,
-            pady=12
+            padx=8,
+            pady=8
         )
-        btn_refresh.pack(fill="x", pady=(0, 8))
+        btn_refresh.grid(row=0, column=0, padx=2, sticky="ew")
 
-        # Export button
+        # Export button with save icon
         btn_export = tk.Button(
             button_frame, 
-            text="✓ Esporta Documenti",
+            text="💾\nEsporta", 
             command=self.complete_sequence_export, 
             bg="#50C878",
             fg="white",
-            font=("Arial", 11, "bold"),
+            font=("Arial", 9, "bold"),
             relief="flat",
             cursor="hand2",
             activebackground="#3EA65E",
             activeforeground="white",
             bd=0,
-            padx=20,
-            pady=12
+            padx=8,
+            pady=8
         )
-        btn_export.pack(fill="x", pady=(0, 8))
+        btn_export.grid(row=0, column=1, padx=2, sticky="ew")
 
-        # Reset button
+        # Reset button with trash icon
         btn_reset = tk.Button(
             button_frame, 
-            text="✕ Rimuovi Documenti",
+            text="🗑\nRimuovi", 
             command=self.reset_workspace, 
             bg="#E74C3C",
             fg="white",
-            font=("Arial", 11, "bold"),
+            font=("Arial", 9, "bold"),
             relief="flat",
             cursor="hand2",
             activebackground="#C0392B",
             activeforeground="white",
             bd=0,
-            padx=20,
-            pady=12
+            padx=8,
+            pady=8
         )
-        btn_reset.pack(fill="x", pady=(0, 8))
+        btn_reset.grid(row=0, column=2, padx=2, sticky="ew")
         
-        # Add hover effects
+        # Hover effects
         def on_enter_refresh(e):
             btn_refresh.config(bg="#357ABD")
         def on_leave_refresh(e):
