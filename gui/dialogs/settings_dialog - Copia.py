@@ -67,15 +67,15 @@ class SettingsDialog:
         tk.Label(frame, 
                 text="Se abilitato: INPUT/00001 → OUTPUT/00001/[files]",
                 font=("Arial", 8), fg="gray").grid(
-            row=3, column=0, columnspan=3, sticky="w", padx=40, pady=(0, 10))        
+            row=3, column=0, columnspan=3, sticky="w", padx=40, pady=(0, 10))
                        
         # Separator
-        ttk.Separator(frame, orient="horizontal").grid(row=4, column=0, columnspan=3,
+        ttk.Separator(frame, orient="horizontal").grid(row=2, column=0, columnspan=3,
                                                        sticky="ew", pady=20, padx=10)
         
         # JSON settings
         tk.Label(frame, text="Gestione File JSON:", font=("Arial", 10, "bold")).grid(
-            row=5, column=0, columnspan=3, sticky="w", padx=10, pady=(10, 5))
+            row=3, column=0, columnspan=3, sticky="w", padx=10, pady=(10, 5))
         
         # Use input folder for JSON checkbox
         self.use_input_json_var = tk.BooleanVar(
@@ -83,20 +83,20 @@ class SettingsDialog:
         ttk.Checkbutton(frame, text="Usa stessa cartella dei documenti per file JSON",
                        variable=self.use_input_json_var,
                        command=self.toggle_json_folder).grid(
-            row=6, column=0, columnspan=3, sticky="w", padx=20, pady=5)
+            row=4, column=0, columnspan=3, sticky="w", padx=20, pady=5)
         
         # JSON folder (conditional)
         self.json_folder_label = tk.Label(frame, text="Cartella JSON Separata:")
-        self.json_folder_label.grid(row=7, column=0, sticky="w", padx=20, pady=5)
+        self.json_folder_label.grid(row=5, column=0, sticky="w", padx=20, pady=5)
         
         self.json_folder_var = tk.StringVar(
             value=self.config_manager.config_data.get('json_input_path', ''))
         self.json_folder_entry = tk.Entry(frame, textvariable=self.json_folder_var, width=40)
-        self.json_folder_entry.grid(row=7, column=1, sticky="ew", padx=5)
+        self.json_folder_entry.grid(row=5, column=1, sticky="ew", padx=5)
         
         self.json_folder_btn = tk.Button(frame, text="Sfoglia",
                                         command=lambda: self.browse_folder('json_input_path'))
-        self.json_folder_btn.grid(row=7, column=2, padx=5)
+        self.json_folder_btn.grid(row=5, column=2, padx=5)
         
         # Initial state
         self.toggle_json_folder()
@@ -488,8 +488,6 @@ Workflow supportati:
             self.json_folder_var.get()
         self.config_manager.config_data['use_input_folder_for_json'] = \
             self.use_input_json_var.get()
-        self.config_manager.config_data['preserve_folder_structure'] = \
-            self.preserve_structure_var.get()
         
         # Fonts
         self.config_manager.config_data['fonts']['document_font_name'] = \

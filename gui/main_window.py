@@ -1238,17 +1238,28 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             messagebox.showwarning("Attenzione", "Nessun documento caricato")
             return
 
-        output_folder = self.config_manager.get('default_output_folder', '')
-        
-        if not output_folder:
+        base_output_folder = self.config_manager.get('default_output_folder', '')
+    
+        if not base_output_folder:
             messagebox.showerror("Errore", 
-                               "Cartella output non configurata.\n"
-                               "Configura la cartella nelle Preferenze.")
+                            "Cartella output non configurata.\n"
+                            "Configura la cartella nelle Preferenze.")
             return
-            
+    
+        # NUOVO: Gestione struttura directory
+        preserve_structure = self.config_manager.get('preserve_folder_structure', False)
+    
+        if preserve_structure and self.input_folder_name:
+            # Crea sottocartella con nome cartella input
+            output_folder = os.path.join(base_output_folder, self.input_folder_name)
+            self.debug_print(f"Preserve structure enabled: {output_folder}")
+        else:
+            output_folder = base_output_folder
+        
         if not os.path.exists(output_folder):
             try:
                 os.makedirs(output_folder)
+                self.debug_print(f"Created output folder: {output_folder}")
             except Exception as e:
                 messagebox.showerror("Errore", f"Impossibile creare cartella output: {str(e)}")
                 return
@@ -1256,38 +1267,38 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         try:
             export_format = self.config_manager.get('export_format', 'JPEG')
             progress_window, progress_var, _ = create_progress_dialog(self, f"Export in formato {export_format}...")
-            
+        
             def progress_callback(message):
                 progress_var.set(message)
                 progress_window.update()
-            
+        
             exported_files = self.export_manager.export_documents(
                 output_folder, self.documentgroups, self.current_document_name, progress_callback
             )
-            
+        
             progress_var.set("Generazione CSV...")
             progress_window.update()
             csv_filename = self.export_csv_metadata(output_folder, exported_files)
             progress_window.destroy()
-            
+        
             summary_message = f"Export completato!\n\n"
             summary_message += f"Formato: {export_format}\n"
-            summary_message += f"Cartella: {output_folder}\n"
+            summary_message += f"Cartella: {output_folder}\n"  # Mostra path completo
             summary_message += f"File immagini: {len(exported_files)}\n"
             summary_message += f"File CSV: {csv_filename}\n"
             if export_format in ['PDF_MULTI', 'TIFF_MULTI']:
                 summary_message += f"Documenti processati: {len(self.documentgroups)}"
-            
+        
             messagebox.showinfo("Export Completato", summary_message)
-            
+        
             if messagebox.askyesno("Reset Workspace", "Export completato!\n\nVuoi resettare il workspace per un nuovo documento?"):
                 self.reset_workspace()
-                
+            
             self.config_manager.set('last_folder', output_folder)
             if self.config_manager.get('auto_save_changes', True):
                 self.save_config()
             self.debug_print(f"Exported {len(exported_files)} files and CSV to {output_folder}")
-            
+        
         except Exception as e:
             if 'progress_window' in locals():
                 progress_window.destroy()

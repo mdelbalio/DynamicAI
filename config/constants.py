@@ -67,6 +67,7 @@ DEFAULT_CONFIG = {
     # ---- NUOVO: Percorsi input ----
     'default_input_folder': '',
     'default_output_folder': '',
+    'preserve_folder_structure': False,  # Mantieni struttura directory input nell'output
     'json_input_path': '',  # Cartella JSON separata (opzionale)
     'use_input_folder_for_json': True,  # True = JSON nella stessa cartella dei documenti
     
