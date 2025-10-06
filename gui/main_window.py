@@ -448,14 +448,14 @@ class AIDOXAApp(tk.Tk):
         # Bind image canvas events
         self.bind_image_events()
     def setup_zoom_controls(self):
-        """Setup zoom control buttons"""
+        """Setup zoom control buttons - CENTRATI"""
         zoom_frame = tk.Frame(self.center_panel, bg="#2C3E50", height=50)
         zoom_frame.pack(side="bottom", fill="x", padx=2, pady=2)
         zoom_frame.pack_propagate(False)
         
-        # Container per pulsanti centrati
+        # Container CENTRATO per i pulsanti
         btn_container = tk.Frame(zoom_frame, bg="#2C3E50")
-        btn_container.pack(side="left", padx=10, pady=5)
+        btn_container.place(relx=0.5, rely=0.5, anchor="center")  # CENTRATO!
         
         # State tracking per pulsanti toggle
         self.zoom_area_active = False
@@ -501,7 +501,7 @@ class AIDOXAApp(tk.Tk):
         )
         self.btn_pan.pack(side="left", padx=2)
         
-        # Status label
+        # Status label - SEMPRE A DESTRA
         self.zoom_status = tk.Label(
             zoom_frame, text="", bg="#2C3E50", fg="white", 
             font=("Arial", 9)
