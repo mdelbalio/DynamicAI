@@ -154,9 +154,13 @@ pip install -r requirements.txt
 python main.py
 ```
 
-### Build eseguibile (Windows, PyInstaller)
+### Build eseguibile (Windows, PyInstaller) con la console
 ```bash
 pyinstaller DynamicAI_with_icon.spec
+```
+### Build eseguibile (Windows, PyInstaller) senza la console
+```bash
+pyinstaller --noconsole --onefile DynamicAI_with_icon.spec
 # oppure: pyinstaller --noconfirm DynamicAI_with_icon.spec
 ```
 L’eseguibile userà `assets/icons/documentai.ico` come icona.
