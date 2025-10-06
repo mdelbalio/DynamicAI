@@ -448,8 +448,33 @@ Workflow supportati:
                  font=("Arial", 10), width=10).pack(side="right", padx=5)
         
     def browse_folder(self, config_key):
-        """Browse for folder"""
-        folder = filedialog.askdirectory()
+        """Browse for folder - starts from currently configured folder"""
+        # Determina cartella iniziale basata sul config_key
+        initial_dir = None
+        
+        if config_key == 'json_input_path':
+            initial_dir = self.json_folder_var.get()
+        elif config_key == 'csv_output_path':
+            initial_dir = self.csv_output_var.get()
+        elif config_key == 'default_input_folder':
+            initial_dir = self.default_input_folder_var.get()
+        elif config_key == 'default_output_folder':
+            initial_dir = self.default_output_folder_var.get()
+        
+        # Se la cartella configurata non esiste, usa la parent directory
+        if initial_dir and os.path.exists(initial_dir):
+            start_dir = initial_dir
+        elif initial_dir:
+            # Usa la directory parent se la cartella configurata non esiste
+            start_dir = os.path.dirname(initial_dir)
+            if not os.path.exists(start_dir):
+                start_dir = None
+        else:
+            start_dir = None
+        
+        # Apri dialog con directory iniziale
+        folder = filedialog.askdirectory(initialdir=start_dir)
+        
         if folder:
             if config_key == 'json_input_path':
                 self.json_folder_var.set(folder)

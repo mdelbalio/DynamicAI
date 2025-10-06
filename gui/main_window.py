@@ -1231,13 +1231,71 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         
         self.update_instructions(instructions)
     
+    def validate_before_export(self):
+        """Validate documents before export - check for empty documents"""
+        empty_docs = []
+        
+        for group in self.documentgroups:
+            if group.is_empty():
+                doc_name = f"{group.document_counter:04d} {group.categoryname}"
+                empty_docs.append((group, doc_name))
+        
+        if empty_docs:
+            # Crea messaggio con lista documenti vuoti
+            empty_list = "\n".join([f"  • {name}" for _, name in empty_docs])
+            
+            message = (
+                f"Attenzione: trovati {len(empty_docs)} documenti senza pagine:\n\n"
+                f"{empty_list}\n\n"
+                "Questi documenti verranno saltati nell'export, causando buchi nella numerazione.\n\n"
+                "Vuoi eliminarli automaticamente prima dell'export?"
+            )
+            
+            response = messagebox.askyesnocancel(
+                "Documenti Vuoti Rilevati",
+                message,
+                icon='warning'
+            )
+            
+            if response is None:  # Cancel
+                return False  # Annulla export
+            elif response:  # Yes - elimina documenti vuoti
+                for group, _ in empty_docs:
+                    if group in self.documentgroups:
+                        self.documentgroups.remove(group)
+                    group.destroy()
+                
+                # Rinumera documenti
+                self.renumber_documents()
+                self.after_idle(self.update_scroll_region)
+                
+                messagebox.showinfo(
+                    "Documenti Eliminati",
+                    f"Eliminati {len(empty_docs)} documenti vuoti.\n"
+                    "Numerazione aggiornata."
+                )
+                return True  # Procedi con export
+            else:  # No - procedi comunque
+                messagebox.showwarning(
+                    "Attenzione",
+                    "L'export procederà con buchi nella numerazione dei file.\n"
+                    "Es: doc001, doc003, doc005..."
+                )
+                return True  # Procedi con export
+        
+        return True  # Nessun documento vuoto, procedi
+    
     # inserire qui def complete_sequence
     def complete_sequence_export(self):
         """Export images and CSV to configured output folder"""
         if not self.documentgroups:
             messagebox.showwarning("Attenzione", "Nessun documento caricato")
             return
-
+        
+        # NUOVO: Validazione documenti vuoti
+        if not self.validate_before_export():
+            return  # Export annullato dall'utente
+        
         base_output_folder = self.config_manager.get('default_output_folder', '')
     
         if not base_output_folder:
