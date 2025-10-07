@@ -2073,8 +2073,16 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
 
     def repack_all_documents(self):
         """Repack all document groups in UI"""
+        # Rimuovi tutti i pack esistenti
         for group in self.documentgroups:
             group.pack_forget()
+        
+        # Ripacchetta tutti i documenti nell'ordine corretto
+        for group in self.documentgroups:
+            group.pack(pady=5, fill="x", padx=5)
+        
+        # Aggiorna scroll region
+        self.after_idle(self.update_scroll_region)
     # ==========================================
     # BATCH MANAGER METHODS
     # ==========================================
