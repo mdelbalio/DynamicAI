@@ -1076,6 +1076,67 @@ class AIDOXAApp(tk.Tk):
             messagebox.showerror("Errore", f"Errore nel caricamento: {str(e)}")
             import traceback
             traceback.print_exc()
+            
+    def load_document_from_batch(self, doc_dict: Dict):
+        """
+        Carica documento da batch per validazione
+        
+        Args:
+            doc_dict: Dizionario documento da batch database
+        """
+        try:
+            # Reset workspace
+            self.reset_workspace()
+            
+            # Extract paths
+            doc_path = doc_dict['doc_path']
+            json_path = doc_dict['json_path']
+            json_data = doc_dict.get('json_data', {})
+            
+            # Set input folder name from relative path
+            self.input_folder_name = os.path.basename(doc_dict['relative_path'])
+            if self.input_folder_name == '.':
+                self.input_folder_name = os.path.basename(os.path.dirname(doc_path))
+            
+            # Store original data
+            self.original_data = json_data
+            
+            # Load metadata
+            self.load_metadata_from_json(json_data)
+            
+            # Set document name
+            self.current_document_name = os.path.splitext(os.path.basename(doc_path))[0]
+            
+            # Load document
+            self.load_document(doc_path)
+            
+            # Determine workflow and build UI
+            workflow_type = doc_dict['workflow_type']
+            
+            if workflow_type == 'split_categorie':
+                # Split categorie workflow
+                categories = json_data.get('categories', [])
+                self.all_categories = set(
+                    cat['categoria'] for cat in categories 
+                    if cat['categoria'] != "Pagina vuota"
+                )
+                self.update_category_combo()
+                self.build_document_groups(categories)
+                self.debug_print(f"Batch load: SPLIT - {len(categories)} categories")
+            else:
+                # Metadati semplici workflow
+                self.all_categories = set()
+                self.update_category_combo()
+                self.build_single_document()
+                self.debug_print(f"Batch load: SINGLE DOCUMENT - {self.documentloader.totalpages} pages")
+            
+            # Update window title
+            self.title(f"DynamicAI - {self.current_document_name} [BATCH]")
+            
+            self.debug_print(f"Document loaded from batch: {doc_path}")
+            
+        except Exception as e:
+            raise Exception(f"Errore caricamento documento da batch: {str(e)}")
 
     def load_document(self, doc_path: str):
         """Load PDF or TIFF document"""

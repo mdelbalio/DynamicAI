@@ -74,6 +74,15 @@ DEFAULT_CONFIG = {
     # ---- NUOVO: Batch Manager ----
     'batch_mode_enabled': True,
     'split_documents_by_category': True,  # NUOVO: Flag per dividere documenti per categoria
+    
+    # ========================================
+    # BATCH CONFIGURATION - AGGIUNTO v3.6
+    # ========================================
+    'batch_input_mode': 'recursive',  # 'flat' | 'recursive'
+    'batch_scan_depth': -1,  # -1 = unlimited, N = max depth
+    'batch_preserve_structure': True,  # Preserve directory structure in output
+    'batch_csv_mode': 'per_folder',  # 'per_folder' | 'global'
+    'batch_database_path': None,  # Verrà impostato dinamicamente
 
     'application_info': {
         'name': 'DynamicAI Editor',

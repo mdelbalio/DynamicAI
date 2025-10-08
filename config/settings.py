@@ -42,8 +42,13 @@ def get_db_file_path():
     """Path del file database SQLite (se usato)."""
     return os.path.join(_user_config_dir(), f"{APP_NAME}_categories.db")
 
+def get_batch_db_file_path():
+    """Path del file database batch SQLite."""
+    return os.path.join(_user_config_dir(), f"{APP_NAME}_batch_state.db")
+
 CONFIG_FILE = get_config_file_path()
 DB_FILE = get_db_file_path()
+BATCH_DB_FILE = get_batch_db_file_path()
 
 class ConfigManager:
     """Gestisce la configurazione dell'applicazione."""
@@ -66,13 +71,25 @@ class ConfigManager:
                         merged[key] = {**merged[key], **value}
                     else:
                         merged[key] = value
+                
+                # ⭐ NUOVO: Imposta dinamicamente batch database path se None
+                if merged.get('batch_database_path') is None:
+                    merged['batch_database_path'] = BATCH_DB_FILE
+                
                 return merged
             else:
-                self.save_config_data(DEFAULT_CONFIG)
-                return DEFAULT_CONFIG.copy()
+                defaults = DEFAULT_CONFIG.copy()
+                # ⭐ NUOVO: Imposta dinamicamente batch database path se None
+                if defaults.get('batch_database_path') is None:
+                    defaults['batch_database_path'] = BATCH_DB_FILE
+                self.save_config_data(defaults)
+                return defaults
         except Exception as e:
             print(f"Error loading config: {e}")
-            return DEFAULT_CONFIG.copy()
+            defaults = DEFAULT_CONFIG.copy()
+            if defaults.get('batch_database_path') is None:
+                defaults['batch_database_path'] = BATCH_DB_FILE
+            return defaults
 
     def save_config_data(self, config_data):
         """Salva il JSON in modo atomico per evitare corruzione file."""
