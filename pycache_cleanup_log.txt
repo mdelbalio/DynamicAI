@@ -1,6 +1,7 @@
 ====================================================== 
-Operazione avviata il 08/10/2025 alle 20:53:16,49 
+Operazione avviata il 08/10/2025 alle 22:26:34,28 
  
+Eliminazione cartella: C:\Users\test\Desktop\PythonMDB\DynamicAI\batch\__pycache__ 
 Eliminazione cartella: C:\Users\test\Desktop\PythonMDB\DynamicAI\config\__pycache__ 
 Eliminazione cartella: C:\Users\test\Desktop\PythonMDB\DynamicAI\database\__pycache__ 
 Eliminazione cartella: C:\Users\test\Desktop\PythonMDB\DynamicAI\export\__pycache__ 
@@ -10,5 +11,5 @@ Eliminazione cartella: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\dialogs\__p
 Eliminazione cartella: C:\Users\test\Desktop\PythonMDB\DynamicAI\loaders\__pycache__ 
 Eliminazione cartella: C:\Users\test\Desktop\PythonMDB\DynamicAI\utils\__pycache__ 
  
-Operazione completata il 08/10/2025 alle 20:53:16,64 
+Operazione completata il 08/10/2025 alle 22:26:34,43 
 ====================================================== 

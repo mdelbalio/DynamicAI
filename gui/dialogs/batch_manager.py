@@ -564,12 +564,19 @@ class BatchManagerDialog:
         
         self.update_status(f"▶️ Modalità validazione sequenziale attiva - {len(pending_docs)} documenti", "blue")
         
+        # ⭐ NUOVO: Minimizza batch manager durante validazione
+        self.dialog.withdraw()  # Nasconde la finestra (compatibile con transient)
+        
         # Open first document
         self.open_next_document()
     
     def open_next_document(self):
         """Apre prossimo documento nella sequenza"""
         if self.current_doc_index >= len(self.sequential_docs):
+            # ⭐ NUOVO: Ripristina batch manager
+            self.dialog.deiconify()  # Ripristina la finestra
+            self.dialog.lift()  # Porta in primo piano
+            
             messagebox.showinfo(
                 "Validazione Completata",
                 "Tutti i documenti nella sequenza sono stati validati!\n\n"
@@ -581,6 +588,10 @@ class BatchManagerDialog:
         doc = self.sequential_docs[self.current_doc_index]
         
         try:
+            # ⭐ NUOVO: Aggiorna titolo con progresso
+            progress_info = f"{self.current_doc_index + 1}/{len(self.sequential_docs)}"
+            self.main_app.title(f"DynamicAI - BATCH [{progress_info}] - {os.path.basename(doc['doc_path'])}")
+            
             # Load document in main app
             self.main_app.load_document_from_batch(doc)
             
@@ -609,9 +620,10 @@ class BatchManagerDialog:
         """Mostra dialog navigazione sequenziale"""
         nav_dialog = tk.Toplevel(self.dialog)
         nav_dialog.title("Navigazione Sequenziale")
-        nav_dialog.geometry("400x200")
+        nav_dialog.geometry("450x280")
+        nav_dialog.resizable(False, False)  # ⭐ AGGIUNTO: blocca resize
         nav_dialog.transient(self.dialog)
-        nav_dialog.attributes('-topmost', True)
+        # ⭐ RIMOSSO topmost - permette di lavorare sul main window
         
         current_doc = self.sequential_docs[self.current_doc_index]
         total_docs = len(self.sequential_docs)
@@ -620,12 +632,29 @@ class BatchManagerDialog:
         info_frame = tk.Frame(nav_dialog, bg="#ECF0F1", pady=15)
         info_frame.pack(fill="x")
         
+        # ⭐ NUOVO: Progress indicator visuale
+        progress_text = f"📄 Documento {self.current_doc_index + 1} di {total_docs}"
+        progress_percent = int((self.current_doc_index + 1) / total_docs * 100)
+        
         tk.Label(
             info_frame,
-            text=f"Documento {self.current_doc_index + 1} di {total_docs}",
+            text=progress_text,
             font=("Arial", 12, "bold"),
             bg="#ECF0F1"
         ).pack()
+        
+        # ⭐ NUOVO: Barra progresso visuale
+        progress_bar_frame = tk.Frame(info_frame, bg="#ECF0F1")
+        progress_bar_frame.pack(fill="x", padx=20, pady=5)
+        
+        progress_canvas = tk.Canvas(progress_bar_frame, height=20, bg="white", highlightthickness=1)
+        progress_canvas.pack(fill="x")
+        
+        bar_width = int(progress_canvas.winfo_reqwidth() * (progress_percent / 100))
+        progress_canvas.create_rectangle(0, 0, 300 * (progress_percent / 100), 20, 
+                                        fill="#27AE60", outline="")
+        progress_canvas.create_text(150, 10, text=f"{progress_percent}%", 
+                                    font=("Arial", 9, "bold"))
         
         tk.Label(
             info_frame,
@@ -671,6 +700,9 @@ class BatchManagerDialog:
         def on_cancel():
             """Annulla validazione sequenziale"""
             nav_dialog.destroy()
+            # ⭐ NUOVO: Ripristina batch manager
+            self.dialog.deiconify()
+            self.dialog.lift()
             self.update_status("⏸️ Validazione sequenziale interrotta", "orange")
         
         # Buttons layout
@@ -740,7 +772,12 @@ class BatchManagerDialog:
         # Start sequential validation with selected
         self.sequential_docs = selected_docs
         self.current_doc_index = 0
-        self.open_next_document()
+        
+        # ⭐ NUOVO: Minimizza batch manager
+        self.update_status(f"▶️ Validazione {len(selected_docs)} documenti selezionati", "blue")
+        self.dialog.withdraw()  # Nasconde la finestra (compatibile con transient)
+        
+        self.open_next_document()        
     
     def refresh_document_in_table(self, doc_id: int, new_status: str):
         """Aggiorna stato documento nella tabella"""
