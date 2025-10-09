@@ -63,6 +63,13 @@ DEFAULT_CONFIG = {
     'csv_output_path': '',  # Se vuoto, usa output_folder
     'csv_use_document_name': False,  # Se True, usa nome documento invece di cartella
     'csv_custom_name': '',  # Nome personalizzato (se vuoto, usa auto)
+
+    # ---- BATCH CSV Configuration ----
+    'batch_csv_location': 'per_folder',  # 'per_folder' | 'root' | 'custom'
+    'batch_csv_naming': 'auto',  # 'auto' | 'folder_name' | 'custom' | 'timestamp'
+    'batch_csv_custom_prefix': 'metadata',  # Prefisso personalizzato
+    'batch_csv_add_timestamp': False,  # Aggiungi timestamp al nome file
+    'batch_csv_add_counter': False,  # Aggiungi contatore sequenziale
     
     # ---- NUOVO: Percorsi input ----
     'default_input_folder': '',

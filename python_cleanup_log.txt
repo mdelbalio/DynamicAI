@@ -1,0 +1,45 @@
+====================================================== 
+PULIZIA COMPLETA CACHE PYTHON 
+====================================================== 
+Operazione avviata: 10/10/2025 -  1:17:12,87 
+Directory: C:\Users\test\Desktop\PythonMDB\DynamicAI 
+ 
+ 
+[FASE 1] CARTELLE __pycache__ 
+---------------------------------------- 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\batch\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\config\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\database\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\export\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\components\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\dialogs\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\loaders\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\utils\__pycache__ 
+  Totale cartelle rimosse: 9 
+ 
+[FASE 2] FILE .pyc (Bytecode Compilato) 
+---------------------------------------- 
+  Totale file .pyc rimossi: 0 
+ 
+[FASE 3] FILE .pyo (Bytecode Ottimizzato) 
+---------------------------------------- 
+  Totale file .pyo rimossi: 0 
+ 
+[FASE 4] FILE .pyd (Estensioni Compilate) 
+---------------------------------------- 
+ATTENZIONE: File .pyd potrebbero essere necessari 
+  Totale file .pyd rimossi: 0 
+  File .pyd NON rimossi (utente ha scelto NO) 
+ 
+====================================================== 
+RIEPILOGO OPERAZIONE 
+====================================================== 
+Cartelle __pycache__ rimosse: 9 
+File .pyc rimossi: 0 
+File .pyo rimossi: 0 
+File .pyd rimossi: 0 
+TOTALE ELEMENTI RIMOSSI: 9 
+ 
+Operazione completata: 10/10/2025 -  1:17:16,18 
+====================================================== 

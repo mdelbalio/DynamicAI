@@ -42,13 +42,39 @@ class BatchExporter:
             Lista file esportati
         """
         try:
-            # Ricrea struttura directory in output
-            relative_path = doc_dict['relative_path']
-            if relative_path == '.':
-                output_dir = base_output
-            else:
-                output_dir = os.path.join(base_output, relative_path)
+            # ⭐ NUOVO: Determina output directory con flag configurazione
+            preserve_structure = self.config_manager.get('batch_preserve_structure', True)
             
+            if preserve_structure:
+                # Preserva struttura cartelle
+                relative_path = doc_dict.get('relative_path', '.')
+                
+                # ⭐ FIX: Se relative_path è '.', estrai nome cartella dal doc_path
+                if relative_path == '.':
+                    # Estrai nome cartella parent del documento
+                    doc_path = doc_dict['doc_path']
+                    folder_name = os.path.basename(os.path.dirname(doc_path))
+                    
+                    # Se la cartella parent è la root batch, usa il nome
+                    if folder_name:
+                        output_dir = os.path.join(base_output, folder_name)
+                        print(f"[BATCH EXPORT] Extracted folder name: {folder_name}")
+                    else:
+                        # Fallback: usa base_output
+                        output_dir = base_output
+                        print(f"[BATCH EXPORT] No folder name, using base output")
+                else:
+                    # relative_path è valido, usalo
+                    output_dir = os.path.join(base_output, relative_path)
+                    print(f"[BATCH EXPORT] Using relative_path: {relative_path}")
+                
+                print(f"[BATCH EXPORT] Preserving structure → {output_dir}")
+            else:
+                # Modalità flat: tutto nella cartella base
+                output_dir = base_output
+                print(f"[BATCH EXPORT] Flat mode: {output_dir}")
+            
+            # Crea cartella se non esiste
             os.makedirs(output_dir, exist_ok=True)
             
             # Carica documento
@@ -211,23 +237,68 @@ class BatchExporter:
     def export_batch_csv(self, session_docs: List[Dict], output_dir: str,
                         csv_mode: str = 'per_folder') -> List[str]:
         """
-        Genera CSV per batch (unico o multipli per cartella)
+        Genera CSV per batch con naming e location configurabili
         
         Args:
             session_docs: Documenti sessione con exported_files
             output_dir: Directory output base
-            csv_mode: 'per_folder' | 'global'
+            csv_mode: 'per_folder' | 'global' (deprecato, usa config)
             
         Returns:
             Lista file CSV creati
         """
         import csv
+        from datetime import datetime
         
         csv_files_created = []
         
-        if csv_mode == 'global':
-            # CSV unico con colonna Path
-            csv_path = os.path.join(output_dir, 'metadata_batch.csv')
+        # ⭐ NUOVO: Leggi configurazione avanzata CSV
+        csv_location = self.config_manager.get('batch_csv_location', 'per_folder')
+        csv_naming = self.config_manager.get('batch_csv_naming', 'auto')
+        csv_prefix = self.config_manager.get('batch_csv_custom_prefix', 'metadata')
+        add_timestamp = self.config_manager.get('batch_csv_add_timestamp', False)
+        add_counter = self.config_manager.get('batch_csv_add_counter', False)
+        
+        # Funzione helper per generare nome CSV
+        def generate_csv_name(folder_name: str = None, counter: int = 0) -> str:
+            """Genera nome file CSV in base a configurazione"""
+            
+            # Base name
+            if csv_naming == 'folder_name' and folder_name:
+                base_name = folder_name
+            elif csv_naming == 'custom':
+                base_name = csv_prefix
+            elif csv_naming == 'timestamp':
+                base_name = datetime.now().strftime('%Y%m%d_%H%M%S')
+            else:  # 'auto'
+                base_name = folder_name if folder_name else 'metadata'
+            
+            # Aggiungi suffissi opzionali
+            suffixes = []
+            
+            if add_counter and counter > 0:
+                suffixes.append(f"{counter:03d}")
+            
+            if add_timestamp:
+                suffixes.append(datetime.now().strftime('%Y%m%d_%H%M%S'))
+            
+            # Costruisci nome finale
+            if suffixes:
+                filename = f"{base_name}_{'_'.join(suffixes)}.csv"
+            else:
+                filename = f"{base_name}.csv"
+            
+            return filename
+        
+        # ========================================
+        # MODALITÀ: Root (CSV globale unico)
+        # ========================================
+        if csv_location == 'root':
+            csv_filename = generate_csv_name()
+            csv_path = os.path.join(output_dir, csv_filename)
+            
+            # Gestisci file esistente
+            csv_path = self._get_unique_csv_path(csv_path)
             
             with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
                 # Raccogli tutti i metadati univoci
@@ -265,8 +336,12 @@ class BatchExporter:
                         writer.writerow(row)
             
             csv_files_created.append(csv_path)
+            print(f"[CSV] Created global CSV: {csv_path}")
         
-        else:  # per_folder
+        # ========================================
+        # MODALITÀ: Per Folder (CSV per cartella)
+        # ========================================
+        elif csv_location == 'per_folder':
             # Raggruppa per cartella
             by_folder = {}
             for doc in session_docs:
@@ -278,14 +353,31 @@ class BatchExporter:
                 by_folder[folder].append(doc)
             
             # Crea CSV per ogni cartella
+            counter = 0
             for folder, docs in by_folder.items():
+                counter += 1
+                
+                # Determina directory CSV
                 if folder == '.':
                     csv_dir = output_dir
+                    # ⭐ FIX: Estrai nome cartella da doc_path
+                    if docs:
+                        first_doc_path = docs[0]['doc_path']
+                        folder_name = os.path.basename(os.path.dirname(first_doc_path))
+                    else:
+                        folder_name = 'metadata'
                 else:
                     csv_dir = os.path.join(output_dir, folder)
+                    folder_name = folder
                 
                 os.makedirs(csv_dir, exist_ok=True)
-                csv_path = os.path.join(csv_dir, 'metadata.csv')
+                
+                # Genera nome CSV
+                csv_filename = generate_csv_name(folder_name, counter)
+                csv_path = os.path.join(csv_dir, csv_filename)
+                
+                # Gestisci file esistente
+                csv_path = self._get_unique_csv_path(csv_path)
                 
                 with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
                     # Raccogli metadati univoci per questa cartella
@@ -319,5 +411,29 @@ class BatchExporter:
                             writer.writerow(row)
                 
                 csv_files_created.append(csv_path)
+                print(f"[CSV] Created folder CSV: {csv_path}")
         
         return csv_files_created
+    
+    def _get_unique_csv_path(self, original_path: str) -> str:
+        """Genera path CSV univoco se file esiste"""
+        if not os.path.exists(original_path):
+            return original_path
+        
+        base_dir = os.path.dirname(original_path)
+        filename = os.path.basename(original_path)
+        name, ext = os.path.splitext(filename)
+        
+        counter = 1
+        while True:
+            new_filename = f"{name}({counter}){ext}"
+            new_path = os.path.join(base_dir, new_filename)
+            
+            if not os.path.exists(new_path):
+                print(f"[CSV] File exists, renamed to: {new_filename}")
+                return new_path
+            
+            counter += 1
+            
+            if counter > 999:
+                raise Exception(f"Troppi file CSV con nome simile: {filename}")

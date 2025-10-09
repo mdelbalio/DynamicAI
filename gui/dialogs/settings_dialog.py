@@ -272,7 +272,7 @@ class SettingsDialog:
         
         tk.Label(frame, text="Modalità Export CSV:",
                 font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=10)
-        
+               
         # CSV mode
         self.csv_mode_var = tk.StringVar(
             value=self.config_manager.config_data.get('csv_mode', 'incremental'))
@@ -355,6 +355,186 @@ class SettingsDialog:
         tk.Label(frame, text="(Lascia vuoto per nome automatico. Nome personalizzato ha priorità)",
                 font=("Arial", 8), fg="gray").pack(anchor="w", padx=20, pady=(0, 5))
         
+        # ========================================
+        # BATCH CSV SETTINGS
+        # ========================================
+        batch_csv_frame = tk.LabelFrame(
+            csv_tab,
+            text="Configurazione CSV Batch",
+            font=("Arial", 10, "bold"),
+            padx=10,
+            pady=10
+        )
+        batch_csv_frame.pack(fill="x", padx=10, pady=10)
+
+        # CSV Location
+        tk.Label(
+            batch_csv_frame,
+            text="Posizione CSV:",
+            font=("Arial", 9, "bold")
+        ).pack(anchor="w", pady=(5, 2))
+
+        csv_location_var = tk.StringVar(value=self.config.get('batch_csv_location', 'per_folder'))
+
+        tk.Radiobutton(
+            batch_csv_frame,
+            text="Per Cartella (un CSV per ogni cartella output)",
+            variable=csv_location_var,
+            value='per_folder',
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", padx=20)
+
+        tk.Radiobutton(
+            batch_csv_frame,
+            text="Globale Root (un CSV unico nella cartella output principale)",
+            variable=csv_location_var,
+            value='root',
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", padx=20)
+
+        # Separator
+        ttk.Separator(batch_csv_frame, orient="horizontal").pack(fill="x", pady=10)
+
+        # CSV Naming
+        tk.Label(
+            batch_csv_frame,
+            text="Naming CSV:",
+            font=("Arial", 9, "bold")
+        ).pack(anchor="w", pady=(5, 2))
+
+        csv_naming_var = tk.StringVar(value=self.config.get('batch_csv_naming', 'auto'))
+
+        tk.Radiobutton(
+            batch_csv_frame,
+            text="Auto (usa nome cartella)",
+            variable=csv_naming_var,
+            value='auto',
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", padx=20)
+
+        tk.Radiobutton(
+            batch_csv_frame,
+            text="Nome Cartella",
+            variable=csv_naming_var,
+            value='folder_name',
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", padx=20)
+
+        tk.Radiobutton(
+            batch_csv_frame,
+            text="Personalizzato (specifica prefisso sotto)",
+            variable=csv_naming_var,
+            value='custom',
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", padx=20)
+
+        tk.Radiobutton(
+            batch_csv_frame,
+            text="Timestamp (YYYYMMDD_HHMMSS)",
+            variable=csv_naming_var,
+            value='timestamp',
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", padx=20)
+
+        # Custom Prefix
+        prefix_frame = tk.Frame(batch_csv_frame, bg="white")
+        prefix_frame.pack(fill="x", padx=20, pady=5)
+
+        tk.Label(
+            prefix_frame,
+            text="Prefisso personalizzato:",
+            font=("Arial", 9),
+            bg="white"
+        ).pack(side="left")
+
+        csv_prefix_var = tk.StringVar(value=self.config.get('batch_csv_custom_prefix', 'metadata'))
+        tk.Entry(
+            prefix_frame,
+            textvariable=csv_prefix_var,
+            font=("Arial", 9),
+            width=20
+        ).pack(side="left", padx=5)
+
+        # Separator
+        ttk.Separator(batch_csv_frame, orient="horizontal").pack(fill="x", pady=10)
+
+        # CSV Suffixes
+        tk.Label(
+            batch_csv_frame,
+            text="Suffissi Opzionali:",
+            font=("Arial", 9, "bold")
+        ).pack(anchor="w", pady=(5, 2))
+
+        csv_timestamp_var = tk.BooleanVar(value=self.config.get('batch_csv_add_timestamp', False))
+        tk.Checkbutton(
+            batch_csv_frame,
+            text="Aggiungi timestamp al nome file (es: metadata_20250110_153045.csv)",
+            variable=csv_timestamp_var,
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", padx=20)
+
+        csv_counter_var = tk.BooleanVar(value=self.config.get('batch_csv_add_counter', False))
+        tk.Checkbutton(
+            batch_csv_frame,
+            text="Aggiungi contatore sequenziale (es: metadata_001.csv, metadata_002.csv)",
+            variable=csv_counter_var,
+            bg="white",
+            font=("Arial", 9)
+        ).pack(anchor="w", padx=20)
+
+        # Example Preview
+        example_label = tk.Label(
+            batch_csv_frame,
+            text="",
+            font=("Arial", 8),
+            fg="gray",
+            bg="white",
+            justify="left"
+        )
+        example_label.pack(anchor="w", padx=20, pady=5)
+
+        def update_example(*args):
+            """Aggiorna esempio nome file"""
+            naming = csv_naming_var.get()
+            prefix = csv_prefix_var.get()
+            add_ts = csv_timestamp_var.get()
+            add_cnt = csv_counter_var.get()
+            
+            if naming == 'folder_name':
+                base = "Insegne_multi-B001"
+            elif naming == 'custom':
+                base = prefix or "metadata"
+            elif naming == 'timestamp':
+                base = "20250110_153045"
+            else:
+                base = "Insegne_multi-B001"
+            
+            suffixes = []
+            if add_cnt:
+                suffixes.append("001")
+            if add_ts:
+                suffixes.append("20250110_153045")
+            
+            if suffixes:
+                example = f"{base}_{'_'.join(suffixes)}.csv"
+            else:
+                example = f"{base}.csv"
+            
+            example_label.config(text=f"Esempio: {example}")
+
+        csv_naming_var.trace('w', update_example)
+        csv_prefix_var.trace('w', update_example)
+        csv_timestamp_var.trace('w', update_example)
+        csv_counter_var.trace('w', update_example)
+        update_example()
+                
     def create_batch_tab(self):
         """Tab Batch (NUOVO)"""
         frame = ttk.Frame(self.notebook)
@@ -546,6 +726,13 @@ Workflow supportati:
         self.config_manager.config_data['csv_output_path'] = self.csv_output_var.get()
         self.config_manager.config_data['csv_use_document_name'] = self.csv_use_doc_name_var.get()
         self.config_manager.config_data['csv_custom_name'] = self.csv_custom_name_var.get().strip()
+        
+        # Batch CSV (NUOVO)
+        self.config_manager.config_data['batch_csv_location'] = self.csv_location_var.get()
+        self.config_manager.config_data['batch_csv_naming'] = self.csv_naming_var.get()
+        self.config_manager.config_data['batch_csv_custom_prefix'] = self.csv_prefix_var.get().strip()
+        self.config_manager.config_data['batch_csv_add_timestamp'] = self.csv_timestamp_var.get()
+        self.config_manager.config_data['batch_csv_add_counter'] = self.csv_counter_var.get()
         
         # Batch
         self.config_manager.config_data['batch_mode_enabled'] = self.batch_enabled_var.get()

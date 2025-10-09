@@ -501,6 +501,14 @@ class AIDOXAApp(tk.Tk):
         )
         self.btn_pan.pack(side="left", padx=2)
         
+        # ⭐ NUOVO: Full Width button
+        self.btn_full_width = tk.Button(
+            btn_container, text="↔️ Full Width", command=self.fit_width,
+            bg="#FF9800", fg="white", font=("Arial", 10, "bold"),
+            relief="flat", cursor="hand2", bd=0, padx=10, pady=5
+        )
+        self.btn_full_width.pack(side="left", padx=2)
+        
         # Status label - SEMPRE A DESTRA
         self.zoom_status = tk.Label(
             zoom_frame, text="", bg="#2C3E50", fg="white", 
@@ -1133,11 +1141,27 @@ class AIDOXAApp(tk.Tk):
             # Update window title
             self.title(f"DynamicAI - {self.current_document_name} [BATCH]")
             
+            # ⭐ NUOVO: Auto-carica prima immagine
+            self.after(100, self.auto_load_first_image)
+            
             self.debug_print(f"Document loaded from batch: {doc_path}")
             
         except Exception as e:
             raise Exception(f"Errore caricamento documento da batch: {str(e)}")
-
+        
+    def auto_load_first_image(self):
+        """Auto-carica la prima immagine disponibile"""
+        try:
+            if self.documentgroups:
+                first_group = self.documentgroups[0]
+                if first_group.thumbnails:
+                    first_thumbnail = first_group.thumbnails[0]
+                    first_thumbnail.select()
+                    self.select_thumbnail(first_thumbnail)
+                    self.debug_print("Prima immagine caricata automaticamente")
+        except Exception as e:
+            self.debug_print(f"Errore auto-load prima immagine: {e}")
+            
     def load_document(self, doc_path: str):
         """Load PDF or TIFF document"""
         try:
@@ -1198,6 +1222,9 @@ class AIDOXAApp(tk.Tk):
         
         self.updating_ui = False
         self.debug_print(f"Created {len(documents)} document groups with grid layout")
+        
+        # ⭐ NUOVO: Auto-carica prima immagine del primo documento
+        self.after(100, self.auto_load_first_image)
 
     def build_single_document(self):
         """Build single document group with all pages (no category splitting)"""
@@ -1226,6 +1253,9 @@ class AIDOXAApp(tk.Tk):
         self.after_idle(self.update_scroll_region)
         self.updating_ui = False
         self.debug_print(f"Created single document with {self.documentloader.totalpages} pages")
+        
+        # ⭐ NUOVO: Auto-carica prima immagine
+        self.after(100, self.auto_load_first_image)
 
     def update_scroll_region(self):
         """Update scroll region for document groups"""
@@ -1675,6 +1705,48 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.update_image_display()
         self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
 
+    def fit_width(self):
+        """Fit image to canvas width (full width)"""
+        if not self.current_image:
+            return
+        
+        try:
+            # Get canvas width
+            canvas_width = self.image_canvas.winfo_width()
+            
+            if canvas_width <= 1:
+                canvas_width = 800  # Default fallback
+            
+            # Calculate scale to fit width
+            img_width = self.current_image.size[0]
+            scale_factor = canvas_width / img_width
+            
+            # Apply zoom
+            self.zoom_factor = scale_factor * 0.95  # 95% per margini
+            self.image_offset_x = 0
+            self.image_offset_y = 0
+            self.auto_fit_on_resize = False
+            
+            self.update_image_display()
+            
+            # Center vertically if image is smaller than canvas
+            self.image_canvas.update_idletasks()
+            canvas_height = self.image_canvas.winfo_height()
+            img_height = self.current_image.size[1] * self.zoom_factor
+            
+            if img_height < canvas_height:
+                # Image fits vertically, center it
+                self.image_canvas.yview_moveto(0)
+            else:
+                # Image is taller, position at top
+                self.image_canvas.yview_moveto(0)
+            
+            self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%} (Full Width)")
+            self.debug_print(f"Full width: scale={self.zoom_factor:.2f}")
+            
+        except Exception as e:
+            self.debug_print(f"Error in fit_width: {e}")
+            
     def zoom_in(self):
         """Zoom in the image"""
         if self.current_image:
