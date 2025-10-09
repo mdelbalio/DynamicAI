@@ -3,10 +3,13 @@ Batch Manager Dialog - Gestione elaborazione batch multi-livello con validazione
 """
 
 import os
+import json  # ⭐ AGGIUNTO
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, filedialog, messagebox, simpledialog  # ⭐ AGGIUNTO simpledialog
 from typing import List, Dict, Optional
 import threading
+import subprocess  # ⭐ AGGIUNTO per aprire file esterni
+import platform  # ⭐ AGGIUNTO per rilevare OS
 
 # Import batch modules
 import sys
@@ -462,7 +465,8 @@ class BatchManagerDialog:
                 'pending': '⏳',
                 'processing': '🔄',
                 'completed': '✅',
-                'error': '❌'
+                'error': '❌',
+                'skipped': '⏭️'  # ⭐ AGGIUNTO
             }
             status_icon = status_icons.get(doc['status'], '?')
             
@@ -501,11 +505,12 @@ class BatchManagerDialog:
         completed = stats['completed']
         pending = stats['pending']
         errors = stats['error']
+        skipped = stats.get('skipped', 0)  # ⭐ AGGIUNTO
         
         progress_percent = stats['progress_percent']
         self.progress_var.set(progress_percent)
         
-        stats_text = f"Trovati {total} documenti | ✅ {completed} | ⏳ {pending} | ❌ {errors}"
+        stats_text = f"Trovati {total} documenti | ✅ {completed} | ⏳ {pending} | ⏭️ {skipped} | ❌ {errors}"
         self.stats_label.config(text=stats_text)
     
     def update_status(self, message: str, color: str = "black"):
@@ -574,7 +579,7 @@ class BatchManagerDialog:
         """Apre prossimo documento nella sequenza"""
         if self.current_doc_index >= len(self.sequential_docs):
             # ⭐ NUOVO: Ripristina batch manager
-            self.dialog.deiconify()  # Ripristina la finestra
+            self.dialog.withdraw()  # Ripristina la finestra
             self.dialog.lift()  # Porta in primo piano
             
             messagebox.showinfo(
@@ -601,8 +606,8 @@ class BatchManagerDialog:
             # Refresh table
             self.refresh_document_in_table(doc['id'], 'processing')
             
-            # Show navigation dialog
-            self.show_navigation_dialog()
+            # ⭐ NUOVO: Mostra toolbar flottante invece di dialog
+            self.create_batch_toolbar()
             
         except Exception as e:
             messagebox.showerror(
@@ -701,7 +706,7 @@ class BatchManagerDialog:
             """Annulla validazione sequenziale"""
             nav_dialog.destroy()
             # ⭐ NUOVO: Ripristina batch manager
-            self.dialog.deiconify()
+            self.dialog.withdraw()
             self.dialog.lift()
             self.update_status("⏸️ Validazione sequenziale interrotta", "orange")
         
@@ -749,6 +754,193 @@ class BatchManagerDialog:
             padx=10,
             pady=5
         ).pack(fill="x", pady=5)
+        
+    def create_batch_toolbar(self):
+        """Crea toolbar flottante per navigazione batch"""
+        # Crea finestra toolbar
+        self.toolbar = tk.Toplevel(self.main_app)
+        self.toolbar.title("Controlli Batch")
+        self.toolbar.geometry("600x120")
+        self.toolbar.resizable(False, False)
+        
+        # Posiziona in alto a destra
+        screen_width = self.main_app.winfo_screenwidth()
+        self.toolbar.geometry(f"+{screen_width - 650}+50")
+        
+        # Sempre in primo piano ma non modale
+        self.toolbar.attributes('-topmost', True)
+        self.toolbar.protocol("WM_DELETE_WINDOW", self.on_toolbar_close)
+        
+        # Frame principale
+        main_frame = tk.Frame(self.toolbar, bg="#34495E", padx=10, pady=10)
+        main_frame.pack(fill="both", expand=True)
+        
+        # Info documento corrente
+        current_doc = self.sequential_docs[self.current_doc_index]
+        total_docs = len(self.sequential_docs)
+        
+        info_label = tk.Label(
+            main_frame,
+            text=f"📄 Documento {self.current_doc_index + 1} di {total_docs}: {os.path.basename(current_doc['doc_path'])}",
+            font=("Arial", 11, "bold"),
+            bg="#34495E",
+            fg="white"
+        )
+        info_label.pack(pady=(0, 10))
+        
+        # Frame pulsanti
+        btn_frame = tk.Frame(main_frame, bg="#34495E")
+        btn_frame.pack(fill="x")
+        
+        # Pulsante COMPLETA (grande, verde)
+        btn_complete = tk.Button(
+            btn_frame,
+            text="✅ COMPLETA\ne Avanti",
+            command=self.toolbar_complete,
+            bg="#27AE60",
+            fg="white",
+            font=("Arial", 12, "bold"),
+            width=12,
+            height=2,
+            cursor="hand2"
+        )
+        btn_complete.pack(side="left", padx=5)
+        
+        # Pulsante SALTA
+        btn_skip = tk.Button(
+            btn_frame,
+            text="⏭️ SALTA",
+            command=self.toolbar_skip,
+            bg="#F39C12",
+            fg="white",
+            font=("Arial", 11, "bold"),
+            width=10,
+            height=2,
+            cursor="hand2"
+        )
+        btn_skip.pack(side="left", padx=5)
+        
+        # Pulsante ERRORE
+        btn_error = tk.Button(
+            btn_frame,
+            text="❌ ERRORE",
+            command=self.toolbar_error,
+            bg="#E74C3C",
+            fg="white",
+            font=("Arial", 11, "bold"),
+            width=10,
+            height=2,
+            cursor="hand2"
+        )
+        btn_error.pack(side="left", padx=5)
+        
+        # Pulsante ANNULLA
+        btn_cancel = tk.Button(
+            btn_frame,
+            text="⏸️ ANNULLA\nSequenza",
+            command=self.toolbar_cancel,
+            bg="#95A5A6",
+            fg="white",
+            font=("Arial", 10),
+            width=10,
+            height=2,
+            cursor="hand2"
+        )
+        btn_cancel.pack(side="left", padx=5)
+        
+        # Shortcut keys
+        self.toolbar.bind("<Return>", lambda e: self.toolbar_complete())
+        self.toolbar.bind("<space>", lambda e: self.toolbar_skip())
+        self.toolbar.bind("<Escape>", lambda e: self.toolbar_cancel())
+    
+    def toolbar_complete(self):
+        """Completa documento corrente e passa al successivo"""
+        current_doc = self.sequential_docs[self.current_doc_index]
+        self.batch_db.update_document_status(current_doc['id'], 'completed')
+        self.refresh_document_in_table(current_doc['id'], 'completed')
+        self.current_doc_index += 1
+        self.advance_to_next_document()
+    
+    def toolbar_skip(self):
+        """Salta documento corrente"""
+        current_doc = self.sequential_docs[self.current_doc_index]
+        self.batch_db.update_document_status(current_doc['id'], 'skipped')  # ⭐ CAMBIATO
+        self.refresh_document_in_table(current_doc['id'], 'skipped')  # ⭐ CAMBIATO
+        self.current_doc_index += 1
+        self.advance_to_next_document()
+    
+    def toolbar_error(self):
+        """Marca documento come errore"""
+        error_dialog = tk.Toplevel(self.toolbar)
+        error_dialog.title("Motivo Errore")
+        error_dialog.geometry("400x150")
+        error_dialog.transient(self.toolbar)
+        error_dialog.grab_set()
+        
+        tk.Label(error_dialog, text="Inserisci motivo errore:", 
+                font=("Arial", 10)).pack(pady=10)
+        
+        error_var = tk.StringVar()
+        entry = tk.Entry(error_dialog, textvariable=error_var, width=40, font=("Arial", 10))
+        entry.pack(pady=5)
+        entry.focus()
+        
+        def save_error():
+            error_msg = error_var.get().strip() or "Errore generico"
+            current_doc = self.sequential_docs[self.current_doc_index]
+            self.batch_db.update_document_status(current_doc['id'], 'error', error_msg)
+            self.refresh_document_in_table(current_doc['id'], 'error')
+            self.current_doc_index += 1
+            error_dialog.destroy()
+            self.advance_to_next_document()
+        
+        btn_frame = tk.Frame(error_dialog)
+        btn_frame.pack(pady=10)
+        
+        tk.Button(btn_frame, text="Conferma", command=save_error,
+                 bg="#E74C3C", fg="white", font=("Arial", 10, "bold"),
+                 width=12).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="Annulla", command=error_dialog.destroy,
+                 font=("Arial", 10), width=12).pack(side="left", padx=5)
+        
+        entry.bind("<Return>", lambda e: save_error())
+    
+    def toolbar_cancel(self):
+        """Annulla validazione sequenziale"""
+        if messagebox.askyesno("Conferma", "Annullare la validazione sequenziale?"):
+            self.close_toolbar()
+            self.dialog.withdraw()
+            self.dialog.lift()
+            self.update_status("⏸️ Validazione sequenziale interrotta", "orange")
+    
+    def on_toolbar_close(self):
+        """Gestisce chiusura toolbar con X"""
+        self.toolbar_cancel()
+    
+    def advance_to_next_document(self):
+        """Avanza al prossimo documento o termina"""
+        if hasattr(self, 'toolbar') and self.toolbar.winfo_exists():
+            self.toolbar.destroy()
+        
+        if self.current_doc_index >= len(self.sequential_docs):
+            # Fine validazione
+            self.dialog.withdraw()
+            self.dialog.lift()
+            
+            messagebox.showinfo(
+                "Validazione Completata",
+                "Tutti i documenti nella sequenza sono stati validati!\n\n"
+                "Usa 'Export Batch' per esportare i risultati."
+            )
+            self.update_status("✅ Validazione sequenziale completata", "green")
+        else:
+            # Carica prossimo documento
+            self.open_next_document()
+    
+    def close_toolbar(self):
+        """Chiude toolbar se esiste"""
+        if hasattr(self, 'toolbar') and self.toolbar.winfo_exists():
+            self.toolbar.destroy()
     
     def validate_selected(self):
         """Valida documenti selezionati nella tabella"""
@@ -794,7 +986,8 @@ class BatchManagerDialog:
                 'pending': '⏳',
                 'processing': '🔄',
                 'completed': '✅',
-                'error': '❌'
+                'error': '❌',
+                'skipped': '⏭️'  # ⭐ AGGIUNTO
             }
             status_icon = status_icons.get(new_status, '?')
             
@@ -1036,8 +1229,13 @@ class BatchManagerDialog:
             menu = tk.Menu(self.dialog, tearoff=0)
             
             menu.add_command(
-                label="📂 Apri Documento",
+                label="👁️ Valida Documento",
                 command=lambda: self.open_document_by_id(doc_id)
+            )
+            
+            menu.add_command(
+                label="📂 Apri File Esterno",
+                command=lambda: self.open_external_viewer(doc['doc_path'])
             )
             
             menu.add_command(
@@ -1049,12 +1247,25 @@ class BatchManagerDialog:
             
             if doc['status'] == 'completed':
                 menu.add_command(
-                    label="🔄 Segna come Pending",
+                    label="🔄 Ri-Valida Documento",
+                    command=lambda: self.revalidate_document(doc_id)
+                )
+                menu.add_command(
+                    label="↩️ Segna come Pending",
                     command=lambda: self.change_document_status(doc_id, 'pending')
                 )
             elif doc['status'] == 'error':
                 menu.add_command(
                     label="🔄 Riprova",
+                    command=lambda: self.change_document_status(doc_id, 'pending')
+                )
+            elif doc['status'] == 'skipped':
+                menu.add_command(
+                    label="🔄 Valida Adesso",
+                    command=lambda: self.revalidate_document(doc_id)
+                )
+                menu.add_command(
+                    label="↩️ Segna come Pending",
                     command=lambda: self.change_document_status(doc_id, 'pending')
                 )
             
@@ -1070,6 +1281,18 @@ class BatchManagerDialog:
             finally:
                 menu.grab_release()
     
+    def open_external_viewer(self, file_path: str):
+        """Apri file con applicazione predefinita del sistema"""
+        try:
+            if platform.system() == 'Windows':
+                os.startfile(file_path)
+            elif platform.system() == 'Darwin':  # macOS
+                subprocess.Popen(['open', file_path])
+            else:  # Linux
+                subprocess.Popen(['xdg-open', file_path])
+        except Exception as e:
+            messagebox.showerror("Errore", f"Impossibile aprire file:\n\n{str(e)}")
+            
     def open_document_by_id(self, doc_id: int):
         """Apri documento per ID"""
         doc = next((d for d in self.documents if d['id'] == doc_id), None)
@@ -1102,6 +1325,35 @@ class BatchManagerDialog:
         """Cambia stato documento manualmente"""
         self.batch_db.update_document_status(doc_id, new_status)
         self.refresh_document_in_table(doc_id, new_status)
+        
+    def revalidate_document(self, doc_id: int):
+        """Ri-valida singolo documento (anche se già completato)"""
+        doc = next((d for d in self.documents if d['id'] == doc_id), None)
+        if not doc:
+            return
+        
+        # Imposta come processing
+        self.batch_db.update_document_status(doc_id, 'processing')
+        self.refresh_document_in_table(doc_id, 'processing')
+        
+        # Nascondi batch manager
+        self.dialog.withdraw()
+        
+        try:
+            # Carica documento
+            self.main_app.load_document_from_batch(doc)
+            
+            # Crea toolbar per singolo documento
+            self.sequential_docs = [doc]
+            self.current_doc_index = 0
+            self.create_batch_toolbar()
+            
+        except Exception as e:
+            messagebox.showerror(
+                "Errore Apertura",
+                f"Impossibile aprire il documento:\n\n{str(e)}"
+            )
+            self.dialog.withdraw()
     
     def show_document_details(self, doc: Dict):
         """Mostra dettagli documento in dialog"""
