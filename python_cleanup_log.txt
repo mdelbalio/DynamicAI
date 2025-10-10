@@ -1,7 +1,7 @@
 ====================================================== 
 PULIZIA COMPLETA CACHE PYTHON 
 ====================================================== 
-Operazione avviata: 10/10/2025 - 23:43:34,32 
+Operazione avviata: 11/10/2025 -  0:13:28,24 
 Directory: C:\Users\test\Desktop\PythonMDB\DynamicAI 
  
  
@@ -41,5 +41,5 @@ File .pyo rimossi: 0
 File .pyd rimossi: 0 
 TOTALE ELEMENTI RIMOSSI: 9 
  
-Operazione completata: 10/10/2025 - 23:43:36,99 
+Operazione completata: 11/10/2025 -  0:13:31,06 
 ====================================================== 
