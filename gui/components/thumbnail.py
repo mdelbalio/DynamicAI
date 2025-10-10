@@ -92,34 +92,72 @@ class PageThumbnail:
         """Crea thumbnail placeholder veloce per lazy loading"""
         from PIL import ImageDraw, ImageFont
         
-        # Crea immagine grigia con numero pagina
-        placeholder = Image.new('RGB', size, color='#CCCCCC')
+        thumb_w, thumb_h = size
+        
+        # Crea immagine placeholder con sfondo grigio chiaro
+        placeholder = Image.new('RGB', size, color='#E0E0E0')
         draw = ImageDraw.Draw(placeholder)
         
-        # Disegna numero pagina
-        text = str(self.pagenum)
+        # Disegna bordo
+        draw.rectangle([(2, 2), (thumb_w-3, thumb_h-3)], outline='#BDBDBD', width=2)
+        
+        # Disegna icona documento stilizzata
+        icon_color = '#9E9E9E'
+        center_x = thumb_w // 2
+        center_y = thumb_h // 2 - 10
+        
+        # Rettangolo documento
+        doc_w, doc_h = 30, 40
+        draw.rectangle(
+            [(center_x - doc_w//2, center_y - doc_h//2),
+             (center_x + doc_w//2, center_y + doc_h//2)],
+            outline=icon_color, width=2
+        )
+        
+        # Linee orizzontali (testo simulato)
+        for i in range(3):
+            y = center_y - 10 + (i * 8)
+            draw.line([(center_x - 12, y), (center_x + 12, y)], fill=icon_color, width=1)
+        
+        # Numero pagina
         try:
-            # Prova font TrueType
-            font = ImageFont.truetype("arial.ttf", 20)
+            font = ImageFont.truetype("arial.ttf", 16)
         except:
-            # Fallback font default
             font = ImageFont.load_default()
         
-        # Centra il testo
+        text = f"#{self.pagenum}"
+        
+        # Calcola dimensioni testo per centrarlo
         try:
             bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
+            text_w = bbox[2] - bbox[0]
+            text_h = bbox[3] - bbox[1]
         except:
             # Fallback per versioni vecchie di Pillow
-            text_width = len(text) * 10
-            text_height = 14
+            text_w = len(text) * 10
+            text_h = 14
         
-        x = (size[0] - text_width) // 2
-        y = (size[1] - text_height) // 2
-        draw.text((x, y), text, fill='#666666', font=font)
+        text_x = (thumb_w - text_w) // 2
+        text_y = thumb_h - 25
         
-        return ImageTk.PhotoImage(placeholder)
+        draw.text((text_x, text_y), text, fill='#616161', font=font)
+        
+        # Label "Caricamento..."
+        try:
+            small_font = ImageFont.truetype("arial.ttf", 8)
+        except:
+            small_font = ImageFont.load_default()
+        
+        loading_text = "Caricamento..."
+        try:
+            bbox = draw.textbbox((0, 0), loading_text, font=small_font)
+            text_w = bbox[2] - bbox[0]
+        except:
+            text_w = len(loading_text) * 6
+        
+        loading_x = (thumb_w - text_w) // 2
+        
+        draw.text((loading_x, thumb_h - 12), loading_text, fill='#9E9E9E', font=small_font)
 
     def set_image(self, image: Image.Image):
         """Imposta immagine reale (chiamato da lazy loading)"""

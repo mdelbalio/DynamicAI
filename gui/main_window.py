@@ -1218,7 +1218,7 @@ class AIDOXAApp(tk.Tk):
             document_counter += 1
 
         # ⭐ NUOVO: Carica solo le prime 3 thumbnail reali per preview
-        self.after(100, lambda: self.preload_first_thumbnails(3))
+        self.after(10, lambda: self.preload_thumbnails_progressive())
 
         self.after_idle(self.update_scroll_region)
         
@@ -1255,7 +1255,7 @@ class AIDOXAApp(tk.Tk):
         self.debug_print(f"Created single document with {self.documentloader.totalpages} pages")
         
         # ⭐ NUOVO: Pre-carica prime thumbnail
-        self.after(100, lambda: self.preload_first_thumbnails(5))       
+        self.after(10, lambda: self.preload_thumbnails_progressive())
 
     def update_scroll_region(self):
         """Update scroll region for document groups"""
@@ -1279,6 +1279,75 @@ class AIDOXAApp(tk.Tk):
                             self.debug_print(f"Preloaded thumbnail for page {thumbnail.pagenum}")
                     except Exception as e:
                         self.debug_print(f"Error preloading thumbnail {thumbnail.pagenum}: {e}")
+
+    def preload_thumbnails_progressive(self):
+        """
+        Carica thumbnail in modo PROGRESSIVO e INTELLIGENTE
+        
+        Strategia:
+        1. Prime 10 thumbnail SUBITO (visibili immediatamente)
+        2. Thumbnail rimanenti in background, 5 alla volta
+        3. UI sempre reattiva
+        """
+        if not self.documentgroups:
+            return
+        
+        # FASE 1: Carica prime 10 thumbnail IMMEDIATAMENTE (bloccante ma veloce)
+        loaded = 0
+        priority_thumbs = []
+        
+        for group in self.documentgroups:
+            for thumbnail in group.thumbnails:
+                if loaded < 10:  # ⭐ Aumentato da 3 a 10
+                    # Carica SUBITO
+                    if hasattr(thumbnail, 'image_loaded') and not thumbnail.image_loaded:
+                        try:
+                            img = thumbnail.document_loader.get_page(thumbnail.pagenum)
+                            if img:
+                                thumbnail.set_image(img)
+                                loaded += 1
+                                self.debug_print(f"✅ Preloaded IMMEDIATE thumbnail page {thumbnail.pagenum}")
+                        except Exception as e:
+                            self.debug_print(f"❌ Error preloading thumbnail {thumbnail.pagenum}: {e}")
+                else:
+                    # Aggiungi a coda per caricamento progressivo
+                    priority_thumbs.append(thumbnail)
+        
+        # FASE 2: Carica rimanenti in BACKGROUND (non bloccante)
+        self._preload_queue = priority_thumbs
+        self._preload_index = 0
+        
+        if self._preload_queue:
+            self.after(20, self._preload_next_batch)  # ⭐ Batch invece di singola
+    
+    def _preload_next_thumbnail(self):
+        """Carica prossima thumbnail in background (non bloccante)"""
+        if not hasattr(self, '_preload_queue') or self._preload_index >= len(self._preload_queue):
+            self.debug_print("✅ All thumbnails preloaded!")
+            return
+        
+        # ⭐ CARICA 5 THUMBNAIL ALLA VOLTA
+        batch_size = 5
+        end_index = min(self._preload_index + batch_size, len(self._preload_queue))
+        
+        for i in range(self._preload_index, end_index):
+            thumbnail = self._preload_queue[i]
+            
+            # Carica thumbnail
+            if hasattr(thumbnail, 'image_loaded') and not thumbnail.image_loaded:
+                try:
+                    img = thumbnail.document_loader.get_page(thumbnail.pagenum)
+                    if img:
+                        thumbnail.set_image(img)
+                        self.debug_print(f"⚡ Background loaded thumbnail page {thumbnail.pagenum}")
+                except Exception as e:
+                    self.debug_print(f"❌ Error loading thumbnail {thumbnail.pagenum}: {e}")
+        
+        self._preload_index = end_index
+        
+        # Continua con prossimo batch (delay 20ms per non bloccare UI)
+        if self._preload_index < len(self._preload_queue):
+            self.after(20, self._preload_next_batch)  # ⭐ Delay ridotto da 50ms a 20ms
 
     def update_document_instructions(self, json_file: str, doc_file: str, input_folder: str, categories: List):
         """Update instructions panel with document information including metadata"""
@@ -1396,82 +1465,148 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
     
     # inserire qui def complete_sequence
     def complete_sequence_export(self):
-        """Export images and CSV to configured output folder"""
+        """Export images and CSV in BACKGROUND (non-blocking)"""
         if not self.documentgroups:
             messagebox.showwarning("Attenzione", "Nessun documento caricato")
             return
         
-        # NUOVO: Validazione documenti vuoti
+        # Validazione documenti vuoti
         if not self.validate_before_export():
-            return  # Export annullato dall'utente
+            return
         
         base_output_folder = self.config_manager.get('default_output_folder', '')
-    
+        
         if not base_output_folder:
             messagebox.showerror("Errore", 
                             "Cartella output non configurata.\n"
                             "Configura la cartella nelle Preferenze.")
             return
-    
-        # NUOVO: Gestione struttura directory
+        
+        # Gestione struttura directory
         preserve_structure = self.config_manager.get('preserve_folder_structure', False)
-    
+        
         if preserve_structure and self.input_folder_name:
-            # Crea sottocartella con nome cartella input
             output_folder = os.path.join(base_output_folder, self.input_folder_name)
-            self.debug_print(f"Preserve structure enabled: {output_folder}")
         else:
             output_folder = base_output_folder
         
         if not os.path.exists(output_folder):
             try:
                 os.makedirs(output_folder)
-                self.debug_print(f"Created output folder: {output_folder}")
             except Exception as e:
                 messagebox.showerror("Errore", f"Impossibile creare cartella output: {str(e)}")
                 return
+        
+        # ⭐ NUOVO: Export in BACKGROUND
+        export_format = self.config_manager.get('export_format', 'JPEG')
+        
+        # Crea progress dialog PERSISTENTE
+        self.export_progress_window = tk.Toplevel(self)
+        self.export_progress_window.title(f"Export in Corso - {export_format}")
+        self.export_progress_window.geometry("500x150")
+        self.export_progress_window.transient(self)
+        self.export_progress_window.resizable(False, False)
+        
+        # Frame principale
+        frame = tk.Frame(self.export_progress_window, padx=20, pady=20)
+        frame.pack(fill="both", expand=True)
+        
+        # Label status
+        self.export_status_label = tk.Label(
+            frame, 
+            text="Inizializzazione export...", 
+            font=("Arial", 10)
+        )
+        self.export_status_label.pack(pady=(0, 10))
+        
+        # Progress bar
+        self.export_progress_bar = ttk.Progressbar(
+            frame, 
+            mode='determinate', 
+            length=400
+        )
+        self.export_progress_bar.pack(pady=10)
+        
+        # Label percentuale
+        self.export_percent_label = tk.Label(
+            frame, 
+            text="0%", 
+            font=("Arial", 9)
+        )
+        self.export_percent_label.pack()
+        
+        # ⭐ ESEGUI EXPORT IN THREAD SEPARATO
+        import threading
+        
+        def export_thread():
+            try:
+                # Callback per aggiornare progress
+                def update_progress(message):
+                    # Questo callback viene chiamato dall'export_manager
+                    self.after(0, lambda m=message: self._update_export_status(m))
+                
+                # Export documenti
+                exported_files = self.export_manager.export_documents(
+                    output_folder, self.documentgroups, self.current_document_name, 
+                    update_progress
+                )
+                
+                # Genera CSV
+                self.after(0, lambda: self._update_export_status("Generazione CSV..."))
+                csv_filename = self.export_csv_metadata(output_folder, exported_files)
+                
+                # Completato!
+                self.after(0, lambda: self._export_completed(
+                    output_folder, exported_files, csv_filename, export_format
+                ))
+                
+            except Exception as e:
+                self.after(0, lambda: self._export_error(str(e)))
+        
+        # Avvia thread
+        thread = threading.Thread(target=export_thread, daemon=True)
+        thread.start()
+        
+        # Permetti all'utente di continuare a lavorare!
+        self.debug_print("🚀 Export avviato in background - UI libera!")
+    
+    def _update_export_status(self, message):
+        """Aggiorna status label durante export (chiamato da thread)"""
+        if hasattr(self, 'export_progress_window') and self.export_progress_window.winfo_exists():
+            self.export_status_label.config(text=message)
+            self.export_progress_window.update()
 
-        try:
-            export_format = self.config_manager.get('export_format', 'JPEG')
-            progress_window, progress_var, _ = create_progress_dialog(self, f"Export in formato {export_format}...")
+    def _export_completed(self, output_folder, exported_files, csv_filename, export_format):
+        """Callback quando export completato"""
+        if hasattr(self, 'export_progress_window') and self.export_progress_window.winfo_exists():
+            self.export_progress_window.destroy()
         
-            def progress_callback(message):
-                progress_var.set(message)
-                progress_window.update()
+        summary = (
+            f"✅ Export completato!\n\n"
+            f"Formato: {export_format}\n"
+            f"Cartella: {output_folder}\n"
+            f"File immagini: {len(exported_files)}\n"
+            f"File CSV: {csv_filename}\n"
+        )
         
-            # Export documenti (versione sequenziale - da ottimizzare)
-            exported_files = self.export_manager.export_documents(
-                output_folder, self.documentgroups, self.current_document_name, 
-                progress_callback
-            )
+        if export_format in ['PDF_MULTI', 'TIFF_MULTI']:
+            summary += f"Documenti processati: {len(self.documentgroups)}"
         
-            progress_var.set("Generazione CSV...")
-            progress_window.update()
-            csv_filename = self.export_csv_metadata(output_folder, exported_files)
-            progress_window.destroy()
+        messagebox.showinfo("Export Completato", summary)
         
-            summary_message = f"Export completato!\n\n"
-            summary_message += f"Formato: {export_format}\n"
-            summary_message += f"Cartella: {output_folder}\n"  # Mostra path completo
-            summary_message += f"File immagini: {len(exported_files)}\n"
-            summary_message += f"File CSV: {csv_filename}\n"
-            if export_format in ['PDF_MULTI', 'TIFF_MULTI']:
-                summary_message += f"Documenti processati: {len(self.documentgroups)}"
+        if messagebox.askyesno("Reset Workspace", "Vuoi resettare il workspace per un nuovo documento?"):
+            self.reset_workspace()
         
-            messagebox.showinfo("Export Completato", summary_message)
+        self.config_manager.set('last_folder', output_folder)
+        if self.config_manager.get('auto_save_changes', True):
+            self.save_config()
+
+    def _export_error(self, error_msg):
+        """Callback quando export fallito"""
+        if hasattr(self, 'export_progress_window') and self.export_progress_window.winfo_exists():
+            self.export_progress_window.destroy()
         
-            if messagebox.askyesno("Reset Workspace", "Export completato!\n\nVuoi resettare il workspace per un nuovo documento?"):
-                self.reset_workspace()
-            
-            self.config_manager.set('last_folder', output_folder)
-            if self.config_manager.get('auto_save_changes', True):
-                self.save_config()
-            self.debug_print(f"Exported {len(exported_files)} files and CSV to {output_folder}")
-        
-        except Exception as e:
-            if 'progress_window' in locals():
-                progress_window.destroy()
-            messagebox.showerror("Errore", f"Errore durante l'export: {str(e)}")
+        messagebox.showerror("Errore Export", f"Errore durante l'export:\n\n{error_msg}")
     
     def reset_workspace(self):
         """Reset workspace after export"""

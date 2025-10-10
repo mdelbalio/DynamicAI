@@ -26,11 +26,14 @@ class SettingsDialog:
         self.dialog.transient(parent)
         self.dialog.grab_set()
         
-        # Create notebook
+        # ⭐ STEP 1: CREA PRIMA I PULSANTI (in fondo alla finestra)
+        self.create_buttons()
+        
+        # ⭐ STEP 2: POI crea notebook (riempie spazio rimanente sopra)
         self.notebook = ttk.Notebook(self.dialog)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Create tabs
+        # ⭐ STEP 3: Crea i tab
         self.create_paths_tab()
         self.create_fonts_tab()
         self.create_thumbnails_tab()
@@ -38,9 +41,6 @@ class SettingsDialog:
         self.create_csv_tab()
         self.create_batch_tab()
         self.create_advanced_tab()
-        
-        # Buttons
-        self.create_buttons()
         
     def create_paths_tab(self):
         """Tab percorsi input/output e JSON"""
