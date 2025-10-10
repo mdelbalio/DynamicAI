@@ -1211,12 +1211,14 @@ class AIDOXAApp(tk.Tk):
         for doc in documents:
             group = DocumentGroup(self.content_frame, doc["categoria"], self, document_counter)
             for pagenum in doc["pagine"]:
-                img = self.documentloader.get_page(pagenum)
-                if img:
-                    group.add_page(pagenum, img)
+                # ⭐ NUOVO: Carica solo numeri pagina, non immagini (VELOCE!)
+                group.add_page_lazy(pagenum, self.documentloader)  # Passa il loader, non l'immagine
             group.pack(pady=5, fill="x", padx=5)
             self.documentgroups.append(group)
             document_counter += 1
+
+        # ⭐ NUOVO: Carica solo le prime 3 thumbnail reali per preview
+        self.after(100, lambda: self.preload_first_thumbnails(3))
 
         self.after_idle(self.update_scroll_region)
         
@@ -1240,13 +1242,11 @@ class AIDOXAApp(tk.Tk):
         # Crea documento unico
         document_name = self.input_folder_name or "Documento"
         group = DocumentGroup(self.content_frame, document_name, self, 1)
-    
-        # Aggiungi tutte le pagine
+
+        # ⭐ NUOVO: Lazy loading (VELOCE!)
         for pagenum in range(1, self.documentloader.totalpages + 1):
-            img = self.documentloader.get_page(pagenum)
-            if img:
-                group.add_page(pagenum, img)
-    
+            group.add_page_lazy(pagenum, self.documentloader)  # ✅ VELOCE!
+
         group.pack(pady=5, fill="x", padx=5)
         self.documentgroups.append(group)
 
@@ -1254,13 +1254,31 @@ class AIDOXAApp(tk.Tk):
         self.updating_ui = False
         self.debug_print(f"Created single document with {self.documentloader.totalpages} pages")
         
-        # ⭐ NUOVO: Auto-carica prima immagine
-        self.after(100, self.auto_load_first_image)
+        # ⭐ NUOVO: Pre-carica prime thumbnail
+        self.after(100, lambda: self.preload_first_thumbnails(5))       
 
     def update_scroll_region(self):
         """Update scroll region for document groups"""
         self.canvas.update_idletasks()
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        
+    def preload_first_thumbnails(self, count: int = 5):
+        """Pre-carica prime N thumbnail per preview veloce"""
+        loaded = 0
+        for group in self.documentgroups:
+            for thumbnail in group.thumbnails:
+                if loaded >= count:
+                    return
+                # Carica thumbnail reale se non già caricata
+                if hasattr(thumbnail, 'image_loaded') and not thumbnail.image_loaded:
+                    try:
+                        img = thumbnail.document_loader.get_page(thumbnail.pagenum)
+                        if img:
+                            thumbnail.set_image(img)
+                            loaded += 1
+                            self.debug_print(f"Preloaded thumbnail for page {thumbnail.pagenum}")
+                    except Exception as e:
+                        self.debug_print(f"Error preloading thumbnail {thumbnail.pagenum}: {e}")
 
     def update_document_instructions(self, json_file: str, doc_file: str, input_folder: str, categories: List):
         """Update instructions panel with document information including metadata"""
@@ -1421,8 +1439,10 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                 progress_var.set(message)
                 progress_window.update()
         
+            # Export documenti (versione sequenziale - da ottimizzare)
             exported_files = self.export_manager.export_documents(
-                output_folder, self.documentgroups, self.current_document_name, progress_callback
+                output_folder, self.documentgroups, self.current_document_name, 
+                progress_callback
             )
         
             progress_var.set("Generazione CSV...")
@@ -1591,6 +1611,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         """Select a thumbnail and display its image"""
         self.debug_print(f"select_thumbnail called for page {thumbnail.pagenum}")
         
+        # Deseleziona precedenti
         if self.selected_thumbnail:
             try:
                 self.selected_thumbnail.deselect()
@@ -1601,13 +1622,16 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
                 self.selected_group.deselect_group()
             except tk.TclError:
                 pass
-            
+        
+        # Imposta nuova selezione    
         self.selected_thumbnail = thumbnail
         self.selected_group = thumbnail.document_group
         
+        # Seleziona visualmente
         thumbnail.select()
         self.selected_group.select_group()
         
+        # Carica e mostra immagine
         self.debug_print(f"About to display image for page {thumbnail.pagenum}")
         
         try:
@@ -1620,29 +1644,11 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             print(f"[ERROR] Failed to display image: {e}")
             self.debug_print(f"Error displaying image: {e}")
         
+        # Aggiorna UI
         self.category_var.set(thumbnail.categoryname)
         self.selection_info.config(text=f"Selezionata: Pagina {thumbnail.pagenum}")
         self.page_info_label.config(text=f"Documento: {thumbnail.categoryname}")
         
-        thumbnail.select()
-        self.selected_group.select_group()
-        
-        self.debug_print(f"About to display image for page {thumbnail.pagenum}")
-        
-        try:
-            if thumbnail.image:
-                self.display_image(thumbnail.image)
-                self.debug_print(f"Image displayed successfully for page {thumbnail.pagenum}")
-            else:
-                self.debug_print(f"No image found for page {thumbnail.pagenum}")
-        except Exception as e:
-            print(f"[ERROR] Failed to display image: {e}")
-            self.debug_print(f"Error displaying image: {e}")
-        
-        self.category_var.set(thumbnail.categoryname)
-        self.selection_info.config(text=f"Selezionata: Pagina {thumbnail.pagenum}")
-        self.page_info_label.config(text=f"Documento: {thumbnail.categoryname}")
-
     def select_document_group(self, group: DocumentGroup):
         """Select an entire document group"""
         if self.selected_thumbnail:

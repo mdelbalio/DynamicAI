@@ -18,21 +18,33 @@ class PageThumbnail:
                  categoryname: str, mainapp: 'AIDOXAApp', document_group: 'DocumentGroup'):
         self.parent = parent
         self.pagenum = pagenum
-        self.image = image
+        self.image = image  # Può essere None per lazy loading
         self.categoryname = categoryname
         self.mainapp = mainapp
         self.document_group = document_group
         self.isselected = False
-        
+
+        # ⭐ NUOVO: Lazy loading support
+        self.document_loader = None  # Riferimento al loader per lazy loading
+        self.image_loaded = False  # Flag per sapere se immagine è caricata
+    
         # Variables for managing drag vs click
         self.is_dragging = False
         self.drag_start_pos: Optional[Tuple[int, int]] = None
-        
+
         # Get thumbnail size from config
         thumb_width = mainapp.config_manager.get('thumbnail_width', 80)
         thumb_height = mainapp.config_manager.get('thumbnail_height', 100)
-        self.thumbnail_imgtk = self.create_thumbnail(image, (thumb_width, thumb_height))
-        
+
+        # ⭐ NUOVO: Crea thumbnail o placeholder
+        if image is None:
+            # Lazy loading: crea placeholder
+            self.thumbnail_imgtk = self.create_placeholder_thumbnail((thumb_width, thumb_height))
+        else:
+            # Caricamento normale
+            self.thumbnail_imgtk = self.create_thumbnail(image, (thumb_width, thumb_height))
+            self.image_loaded = True
+
         # Store current thumbnail size for updates
         self.current_thumb_size = (thumb_width, thumb_height)
         
@@ -74,6 +86,56 @@ class PageThumbnail:
         img_copy.thumbnail(size, RESAMPLEFILTER)
         return ImageTk.PhotoImage(img_copy)
 
+    # ⭐⭐⭐ AGGIUNGI QUESTI METODI QUI ⭐⭐⭐
+
+    def create_placeholder_thumbnail(self, size: Tuple[int, int] = (80, 100)) -> ImageTk.PhotoImage:
+        """Crea thumbnail placeholder veloce per lazy loading"""
+        from PIL import ImageDraw, ImageFont
+        
+        # Crea immagine grigia con numero pagina
+        placeholder = Image.new('RGB', size, color='#CCCCCC')
+        draw = ImageDraw.Draw(placeholder)
+        
+        # Disegna numero pagina
+        text = str(self.pagenum)
+        try:
+            # Prova font TrueType
+            font = ImageFont.truetype("arial.ttf", 20)
+        except:
+            # Fallback font default
+            font = ImageFont.load_default()
+        
+        # Centra il testo
+        try:
+            bbox = draw.textbbox((0, 0), text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+        except:
+            # Fallback per versioni vecchie di Pillow
+            text_width = len(text) * 10
+            text_height = 14
+        
+        x = (size[0] - text_width) // 2
+        y = (size[1] - text_height) // 2
+        draw.text((x, y), text, fill='#666666', font=font)
+        
+        return ImageTk.PhotoImage(placeholder)
+
+    def set_image(self, image: Image.Image):
+        """Imposta immagine reale (chiamato da lazy loading)"""
+        self.image = image
+        
+        # Ricrea thumbnail con immagine reale
+        thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+        thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
+        self.thumbnail_imgtk = self.create_thumbnail(image, (thumb_width, thumb_height))
+        
+        # Aggiorna label
+        self.img_label.configure(image=self.thumbnail_imgtk)
+        
+        self.image_loaded = True
+        self.mainapp.debug_print(f"Image loaded for page {self.pagenum}")
+
     def on_enter(self, event):
         """Handle mouse enter - show hover effect"""
         if not self.isselected:
@@ -90,6 +152,16 @@ class PageThumbnail:
 
     def on_button_press(self, event):
         """Handle button press - start potential drag"""
+        # ⭐ NUOVO: Carica immagine reale se non ancora caricata (lazy loading)
+        if not self.image_loaded and self.document_loader:
+            try:
+                self.mainapp.debug_print(f"Loading image on demand for page {self.pagenum}")
+                img = self.document_loader.get_page(self.pagenum)
+                if img:
+                    self.set_image(img)
+            except Exception as e:
+                self.mainapp.debug_print(f"Error loading image on demand: {e}")
+        
         self.drag_start_pos = (event.x_root, event.y_root)
         self.is_dragging = False
         self.mainapp.debug_print(f"Button press on page {self.pagenum}")

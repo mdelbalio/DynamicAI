@@ -359,7 +359,7 @@ class SettingsDialog:
         # BATCH CSV SETTINGS
         # ========================================
         batch_csv_frame = tk.LabelFrame(
-            csv_tab,
+            frame,
             text="Configurazione CSV Batch",
             font=("Arial", 10, "bold"),
             padx=10,
@@ -374,12 +374,12 @@ class SettingsDialog:
             font=("Arial", 9, "bold")
         ).pack(anchor="w", pady=(5, 2))
 
-        csv_location_var = tk.StringVar(value=self.config.get('batch_csv_location', 'per_folder'))
-
+        self.csv_location_var = tk.StringVar(value=self.config_manager.config_data.get('batch_csv_location', 'per_folder'))
+        
         tk.Radiobutton(
             batch_csv_frame,
             text="Per Cartella (un CSV per ogni cartella output)",
-            variable=csv_location_var,
+            variable=self.csv_location_var,
             value='per_folder',
             bg="white",
             font=("Arial", 9)
@@ -388,7 +388,7 @@ class SettingsDialog:
         tk.Radiobutton(
             batch_csv_frame,
             text="Globale Root (un CSV unico nella cartella output principale)",
-            variable=csv_location_var,
+            variable=self.csv_location_var,
             value='root',
             bg="white",
             font=("Arial", 9)
@@ -404,12 +404,12 @@ class SettingsDialog:
             font=("Arial", 9, "bold")
         ).pack(anchor="w", pady=(5, 2))
 
-        csv_naming_var = tk.StringVar(value=self.config.get('batch_csv_naming', 'auto'))
+        self.csv_naming_var = tk.StringVar(value=self.config_manager.config_data.get('batch_csv_naming', 'auto'))
 
         tk.Radiobutton(
             batch_csv_frame,
             text="Auto (usa nome cartella)",
-            variable=csv_naming_var,
+            variable=self.csv_naming_var,  # ✅
             value='auto',
             bg="white",
             font=("Arial", 9)
@@ -418,7 +418,7 @@ class SettingsDialog:
         tk.Radiobutton(
             batch_csv_frame,
             text="Nome Cartella",
-            variable=csv_naming_var,
+            variable=self.csv_naming_var,  # ✅
             value='folder_name',
             bg="white",
             font=("Arial", 9)
@@ -427,7 +427,7 @@ class SettingsDialog:
         tk.Radiobutton(
             batch_csv_frame,
             text="Personalizzato (specifica prefisso sotto)",
-            variable=csv_naming_var,
+            variable=self.csv_naming_var,  # ✅
             value='custom',
             bg="white",
             font=("Arial", 9)
@@ -436,7 +436,7 @@ class SettingsDialog:
         tk.Radiobutton(
             batch_csv_frame,
             text="Timestamp (YYYYMMDD_HHMMSS)",
-            variable=csv_naming_var,
+            variable=self.csv_naming_var,  # ✅
             value='timestamp',
             bg="white",
             font=("Arial", 9)
@@ -453,10 +453,10 @@ class SettingsDialog:
             bg="white"
         ).pack(side="left")
 
-        csv_prefix_var = tk.StringVar(value=self.config.get('batch_csv_custom_prefix', 'metadata'))
+        self.csv_prefix_var = tk.StringVar(value=self.config_manager.config_data.get('batch_csv_custom_prefix', 'metadata'))
         tk.Entry(
             prefix_frame,
-            textvariable=csv_prefix_var,
+            textvariable=self.csv_prefix_var,  # ✅
             font=("Arial", 9),
             width=20
         ).pack(side="left", padx=5)
@@ -471,20 +471,20 @@ class SettingsDialog:
             font=("Arial", 9, "bold")
         ).pack(anchor="w", pady=(5, 2))
 
-        csv_timestamp_var = tk.BooleanVar(value=self.config.get('batch_csv_add_timestamp', False))
+        self.csv_timestamp_var = tk.BooleanVar(value=self.config_manager.config_data.get('batch_csv_add_timestamp', False))
         tk.Checkbutton(
             batch_csv_frame,
             text="Aggiungi timestamp al nome file (es: metadata_20250110_153045.csv)",
-            variable=csv_timestamp_var,
+            variable=self.csv_timestamp_var,  # ✅
             bg="white",
             font=("Arial", 9)
         ).pack(anchor="w", padx=20)
 
-        csv_counter_var = tk.BooleanVar(value=self.config.get('batch_csv_add_counter', False))
+        self.csv_counter_var = tk.BooleanVar(value=self.config_manager.config_data.get('batch_csv_add_counter', False))
         tk.Checkbutton(
             batch_csv_frame,
             text="Aggiungi contatore sequenziale (es: metadata_001.csv, metadata_002.csv)",
-            variable=csv_counter_var,
+            variable=self.csv_counter_var,  # ✅
             bg="white",
             font=("Arial", 9)
         ).pack(anchor="w", padx=20)
@@ -502,10 +502,10 @@ class SettingsDialog:
 
         def update_example(*args):
             """Aggiorna esempio nome file"""
-            naming = csv_naming_var.get()
-            prefix = csv_prefix_var.get()
-            add_ts = csv_timestamp_var.get()
-            add_cnt = csv_counter_var.get()
+            naming = self.csv_naming_var.get()  # ✅
+            prefix = self.csv_prefix_var.get()  # ✅
+            add_ts = self.csv_timestamp_var.get()  # ✅
+            add_cnt = self.csv_counter_var.get()  # ✅
             
             if naming == 'folder_name':
                 base = "Insegne_multi-B001"
@@ -529,10 +529,10 @@ class SettingsDialog:
             
             example_label.config(text=f"Esempio: {example}")
 
-        csv_naming_var.trace('w', update_example)
-        csv_prefix_var.trace('w', update_example)
-        csv_timestamp_var.trace('w', update_example)
-        csv_counter_var.trace('w', update_example)
+        self.csv_naming_var.trace('w', update_example)  # ✅
+        self.csv_prefix_var.trace('w', update_example)  # ✅
+        self.csv_timestamp_var.trace('w', update_example)  # ✅
+        self.csv_counter_var.trace('w', update_example)  # ✅
         update_example()
                 
     def create_batch_tab(self):

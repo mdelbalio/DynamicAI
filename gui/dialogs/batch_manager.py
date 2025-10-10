@@ -212,22 +212,7 @@ class BatchManagerDialog:
         # Left side buttons
         left_frame = tk.Frame(btn_frame, bg="#ECF0F1")
         left_frame.pack(side="left")
-        
-        # Carica Tutti
-        self.btn_load_all = tk.Button(
-            left_frame,
-            text="📂 Carica Tutti",
-            command=self.load_all_documents,
-            bg="#3498DB",
-            fg="white",
-            font=("Arial", 10, "bold"),
-            cursor="hand2",
-            padx=15,
-            pady=8,
-            state="disabled"
-        )
-        self.btn_load_all.pack(side="left", padx=5)
-        
+             
         # Validazione Sequenziale
         self.btn_validate_seq = tk.Button(
             left_frame,
@@ -449,7 +434,6 @@ class BatchManagerDialog:
     
     def enable_action_buttons(self):
         """Abilita pulsanti azione dopo scansione"""
-        self.btn_load_all.config(state="normal")
         self.btn_validate_seq.config(state="normal")
         self.btn_validate_sel.config(state="normal")
         self.btn_export.config(state="normal")

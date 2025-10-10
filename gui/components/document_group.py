@@ -139,20 +139,53 @@ class DocumentGroup:
         thumbnail = PageThumbnail(self.pages_frame, pagenum, image, self.categoryname, self.mainapp, self)
         
         if position is None:
-            # Add at end
             self.thumbnails.append(thumbnail)
             if pagenum not in self.pages:
                 self.pages.append(pagenum)
         else:
-            # Insert at specific position
             self.thumbnails.insert(position, thumbnail)
             if pagenum not in self.pages:
                 self.pages.insert(position, pagenum)
         
-        # Repack all thumbnails in grid layout
         self.repack_thumbnails_grid()
-        
         return thumbnail
+
+    def add_page_lazy(self, pagenum: int, document_loader, position: Optional[int] = None) -> PageThumbnail:
+        """
+        Aggiungi pagina con lazy loading (senza caricare immagine subito)
+        
+        Args:
+            pagenum: Numero pagina
+            document_loader: Loader del documento per caricare immagine on-demand
+            position: Posizione di inserimento (opzionale)
+            
+        Returns:
+            PageThumbnail creato
+        """
+        # Crea thumbnail SENZA immagine (placeholder)
+        thumbnail = PageThumbnail(
+            self.pages_frame, 
+            pagenum, 
+            None,  # ⭐ Nessuna immagine = placeholder
+            self.categoryname, 
+            self.mainapp, 
+            self
+        )
+        
+        # ⭐ Passa il riferimento al loader per caricamento on-demand
+        thumbnail.document_loader = document_loader
+        
+        if position is None:
+            self.thumbnails.append(thumbnail)
+            if pagenum not in self.pages:
+                self.pages.append(pagenum)
+        else:
+            self.thumbnails.insert(position, thumbnail)
+            if pagenum not in self.pages:
+                self.pages.insert(position, pagenum)
+        
+        self.repack_thumbnails_grid()
+        return thumbnail    
 
     def remove_thumbnail(self, thumbnail: PageThumbnail) -> int:
         """Remove a thumbnail from this group"""
