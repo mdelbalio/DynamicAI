@@ -9,7 +9,8 @@ import csv
 from PIL import Image
 from typing import List, Dict, Optional
 from tempfile import NamedTemporaryFile
-
+import queue
+import threading
 class ExportManager:
     """Gestisce export documenti e metadati"""
     
@@ -19,6 +20,9 @@ class ExportManager:
             config_manager: Oggetto ConfigManager (non dict!)
         """
         self.config_manager = config_manager
+        # Thread-safe communication
+        self.ui_update_queue = queue.Queue()
+        self.cancel_event = threading.Event()
         
     def sanitize_filename(self, filename: str) -> str:
         """
@@ -581,3 +585,88 @@ class ExportManager:
             'export_format': self.config_manager.get('export_format', 'JPEG')
         }
         return summary
+    
+    def export_documents_threaded(self, output_folder: str, document_groups: List,
+                             document_name: str, ui_callback=None) -> None:
+        """
+        Thread-safe export with progress updates via queue
+        
+        Args:
+            output_folder: Output directory
+            document_groups: List of DocumentGroup objects  
+            document_name: Base document name
+            ui_callback: Main UI callback for processing queue messages
+        """
+        def worker_thread():
+            """Background worker thread for export operations"""
+            try:
+                self.cancel_event.clear()
+                
+                def progress_callback(message):
+                    """Thread-safe progress callback"""
+                    if not self.cancel_event.is_set():
+                        self.ui_update_queue.put(('progress', message))
+                
+                # Perform export in background
+                exported_files = self.export_documents(
+                    output_folder, document_groups, document_name, progress_callback
+                )
+                
+                if not self.cancel_event.is_set():
+                    self.ui_update_queue.put(('completed', {
+                        'files': exported_files,
+                        'folder': output_folder,
+                        'format': self.config_manager.get('export_format', 'JPEG')
+                    }))
+                    
+            except Exception as e:
+                if not self.cancel_event.is_set():
+                    self.ui_update_queue.put(('error', str(e)))
+        
+        # Start background thread
+        thread = threading.Thread(target=worker_thread, daemon=True)
+        thread.start()
+        
+        # Start UI queue processor if callback provided
+        if ui_callback:
+            self._process_ui_queue(ui_callback)
+
+    def _process_ui_queue(self, ui_callback):
+        """Process UI updates from background thread"""
+        try:
+            # Non-blocking queue check
+            while True:
+                try:
+                    message_type, data = self.ui_update_queue.get_nowait()
+                    ui_callback(message_type, data)
+                    self.ui_update_queue.task_done()
+                except queue.Empty:
+                    break
+            
+            # Schedule next check if not cancelled
+            if not self.cancel_event.is_set():
+                # Use a proper UI callback mechanism instead of direct after()
+                # This will be called by main UI thread
+                pass
+                
+        except Exception as e:
+            ui_callback('error', f'Queue processing error: {str(e)}')
+
+    def cancel_export(self):
+        """Cancel ongoing export operation"""
+        self.cancel_event.set()
+        
+        # Clear remaining queue items
+        try:
+            while True:
+                self.ui_update_queue.get_nowait()
+                self.ui_update_queue.task_done()
+        except queue.Empty:
+            pass
+
+    def get_export_stats(self) -> dict:
+        """Get export operation statistics"""
+        return {
+            'queue_size': self.ui_update_queue.qsize(),
+            'is_cancelled': self.cancel_event.is_set()
+        }

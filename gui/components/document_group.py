@@ -151,30 +151,26 @@ class DocumentGroup:
         return thumbnail
 
     def add_page_lazy(self, pagenum: int, document_loader, position: Optional[int] = None) -> PageThumbnail:
-        """
-        Aggiungi pagina con lazy loading (senza caricare immagine subito)
+        """Aggiungi pagina con lazy loading - carica immagine dopo creazione
         
         Args:
             pagenum: Numero pagina
-            document_loader: Loader del documento per caricare immagine on-demand
+            document_loader: Loader del documento per caricare immagine
             position: Posizione di inserimento (opzionale)
-            
+        
         Returns:
             PageThumbnail creato
         """
         # Crea thumbnail SENZA immagine (placeholder)
         thumbnail = PageThumbnail(
-            self.pages_frame, 
-            pagenum, 
-            None,  # ⭐ Nessuna immagine = placeholder
-            self.categoryname, 
-            self.mainapp, 
-            self
+            self.pages_frame, pagenum, None,  # None = placeholder
+            self.categoryname, self.mainapp, self  # ✅ CORRETTO: self.categoryname
         )
         
-        # ⭐ Passa il riferimento al loader per caricamento on-demand
+        # ⭐ IMPOSTA il document_loader SUBITO
         thumbnail.document_loader = document_loader
         
+        # Aggiungi alla lista
         if position is None:
             self.thumbnails.append(thumbnail)
             if pagenum not in self.pages:
@@ -184,8 +180,27 @@ class DocumentGroup:
             if pagenum not in self.pages:
                 self.pages.insert(position, pagenum)
         
+        # Repack grid
         self.repack_thumbnails_grid()
-        return thumbnail    
+        
+        # ⭐ CARICA IMMAGINE DOPO UN BREVE DELAY
+        self.mainapp.after(50, lambda: self._load_thumbnail_image(thumbnail))
+        
+        return thumbnail
+
+    def _load_thumbnail_image(self, thumbnail):
+        """Helper per caricare immagine thumbnail in background"""
+        try:
+            if not thumbnail.image_loaded and thumbnail.document_loader:
+                self.mainapp.debug_print(f"Loading image for page {thumbnail.pagenum}")
+                img = thumbnail.document_loader.get_page(thumbnail.pagenum)
+                if img:
+                    thumbnail.set_image(img)
+                    self.mainapp.debug_print(f"✅ Image loaded for page {thumbnail.pagenum}")
+                else:
+                    self.mainapp.debug_print(f"❌ Failed to load image for page {thumbnail.pagenum}")
+        except Exception as e:
+            self.mainapp.debug_print(f"Error loading thumbnail image: {e}")   
 
     def remove_thumbnail(self, thumbnail: PageThumbnail) -> int:
         """Remove a thumbnail from this group"""

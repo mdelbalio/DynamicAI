@@ -14,43 +14,58 @@ if TYPE_CHECKING:
 class PageThumbnail:
     """Represents a page thumbnail with drag and drop capabilities and grid layout support"""
     
-    def __init__(self, parent: tk.Widget, pagenum: int, image: Image.Image, 
-                 categoryname: str, mainapp: 'AIDOXAApp', document_group: 'DocumentGroup'):
+    def __init__(self, parent: tk.Widget, pagenum: int, image: Image.Image,
+                categoryname: str, mainapp: 'AIDOXAApp', document_group: 'DocumentGroup'):
         self.parent = parent
         self.pagenum = pagenum
         self.image = image  # Può essere None per lazy loading
         self.categoryname = categoryname
         self.mainapp = mainapp
         self.document_group = document_group
-        self.isselected = False
-
+        self.is_selected = False
+        
         # ⭐ NUOVO: Lazy loading support
         self.document_loader = None  # Riferimento al loader per lazy loading
-        self.image_loaded = False  # Flag per sapere se immagine è caricata
-    
+        self.image_loaded = False    # Flag per sapere se immagine è caricata
+        
         # Variables for managing drag vs click
         self.is_dragging = False
         self.drag_start_pos: Optional[Tuple[int, int]] = None
-
+        
         # Get thumbnail size from config
         thumb_width = mainapp.config_manager.get('thumbnail_width', 80)
         thumb_height = mainapp.config_manager.get('thumbnail_height', 100)
-
+        
         # ⭐ NUOVO: Crea thumbnail o placeholder
         if image is None:
-            # Lazy loading: crea placeholder
-            self.thumbnail_imgtk = self.create_placeholder_thumbnail((thumb_width, thumb_height))
+            # Lazy loading - crea placeholder
+            self.thumbnail_img_tk = self.create_placeholder_thumbnail((thumb_width, thumb_height))
         else:
             # Caricamento normale
-            self.thumbnail_imgtk = self.create_thumbnail(image, (thumb_width, thumb_height))
+            self.thumbnail_img_tk = self.create_thumbnail(image, (thumb_width, thumb_height))
             self.image_loaded = True
-
+        
         # Store current thumbnail size for updates
         self.current_thumb_size = (thumb_width, thumb_height)
         
         # Create UI elements
         self.create_widgets()
         self.bind_events()
+        
+        # ⭐ NUOVO: Auto-load se c'è document_loader
+        if image is None and hasattr(self, 'document_loader') and self.document_loader:
+            self.mainapp.after(100, self.try_auto_load)
+
+    def try_auto_load(self):
+        """Prova a caricare automaticamente l'immagine dopo creazione"""
+        if not self.image_loaded and self.document_loader:
+            try:
+                self.mainapp.debug_print(f"Auto-loading image for page {self.pagenum}")
+                img = self.document_loader.get_page(self.pagenum)
+                if img:
+                    self.set_image(img)
+            except Exception as e:
+                self.mainapp.debug_print(f"Error in auto-load: {e}")
 
     def create_widgets(self):
         """Create the thumbnail UI widgets"""
@@ -58,7 +73,7 @@ class PageThumbnail:
         self.frame = tk.Frame(self.parent, bd=2, relief="solid", bg="white")
         
         # Image Label
-        self.img_label = tk.Label(self.frame, image=self.thumbnail_imgtk, bg="white", cursor="hand2")
+        self.img_label = tk.Label(self.frame, image=self.thumbnail_img_tk, bg="white", cursor="hand2")
         self.img_label.pack(padx=2, pady=2)
         
         # Page label
@@ -174,16 +189,69 @@ class PageThumbnail:
         self.image_loaded = True
         self.mainapp.debug_print(f"Image loaded for page {self.pagenum}")
 
+    def set_document_loader(self, loader):
+        """Imposta riferimento al document loader per lazy loading"""
+        self.document_loader = loader
+        self.mainapp.debug_print(f"Document loader set for page {self.pagenum}")
+
+    def load_image_if_needed(self):
+        """Carica immagine reale se necessario (per viewport loading)"""
+        if not self.image_loaded and self.document_loader:
+            try:
+                self.mainapp.debug_print(f"Loading image for viewport - page {self.pagenum}")
+                img = self.document_loader.get_page(self.pagenum)
+                if img:
+                    self.set_image(img)
+                    return True
+            except Exception as e:
+                self.mainapp.debug_print(f"Error in viewport loading: {e}")
+        return False
+
+    def is_in_viewport(self, canvas_widget) -> bool:
+        """Controlla se la thumbnail è visibile nel viewport"""
+        try:
+            # Ottieni posizione del frame rispetto al canvas
+            frame_x = self.frame.winfo_x()
+            frame_y = self.frame.winfo_y()
+            frame_w = self.frame.winfo_width()
+            frame_h = self.frame.winfo_height()
+            
+            # Ottieni dimensioni visibili del canvas
+            canvas_width = canvas_widget.winfo_width()
+            canvas_height = canvas_widget.winfo_height()
+            
+            # Controlla se interseca con il viewport
+            visible = (frame_x < canvas_width and 
+                    frame_x + frame_w > 0 and
+                    frame_y < canvas_height and 
+                    frame_y + frame_h > 0)
+            
+            return visible
+            
+        except Exception as e:
+            # Se c'è un errore, assumiamo sia visibile per sicurezza
+            return True
+
+    def get_load_priority(self, scroll_top: int) -> int:
+        """Ottieni priorità di caricamento basata su distanza da viewport"""
+        try:
+            frame_y = self.frame.winfo_y()
+            distance = abs(frame_y - scroll_top)
+            # Priorità inverse (0 = alta, 1000+ = bassa)  
+            return min(9999, distance)
+        except:
+            return 5000  # Priorità media se errore
+
     def on_enter(self, event):
         """Handle mouse enter - show hover effect"""
-        if not self.isselected:
+        if not self.is_selected:
             self.frame.configure(bg="#E0E0E0")
             self.img_label.configure(bg="#E0E0E0")
             self.text_label.configure(bg="#E0E0E0")
 
     def on_leave(self, event):
         """Handle mouse leave - remove hover effect"""
-        if not self.isselected:
+        if not self.is_selected:
             self.frame.configure(bg="white")
             self.img_label.configure(bg="white")
             self.text_label.configure(bg="white")
@@ -252,15 +320,18 @@ class PageThumbnail:
 
     def select(self):
         """Select this thumbnail"""
-        self.isselected = True
+        self.is_selected = True
         self.frame.configure(bg="#87CEEB", relief="raised", bd=3)
         self.img_label.configure(bg="#87CEEB")
         self.text_label.configure(bg="#87CEEB")
 
     def deselect(self):
-        """Deselect this thumbnail"""
-        self.isselected = False
-        self.frame.configure(bg="white", relief="solid", bd=2)
+        self.is_selected = False
+        try:
+            self.frame.configure(bg="white", relief="solid", bd=2)
+        except tk.TclError:
+            # Widget già distrutto, ignora
+            pass
         self.img_label.configure(bg="white")
         self.text_label.configure(bg="white")
 
@@ -317,7 +388,7 @@ class PageThumbnail:
         return {
             'pagenum': self.pagenum,
             'category': self.categoryname,
-            'selected': self.isselected,
+            'selected': self.is_selected,
             'image_size': self.image.size if self.image else None,
             'thumbnail_size': self.current_thumb_size,
             'grid_position': {

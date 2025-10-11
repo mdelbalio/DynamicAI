@@ -1281,44 +1281,70 @@ class AIDOXAApp(tk.Tk):
                         self.debug_print(f"Error preloading thumbnail {thumbnail.pagenum}: {e}")
 
     def preload_thumbnails_progressive(self):
-        """
-        Carica thumbnail in modo PROGRESSIVO e INTELLIGENTE
-        
-        Strategia:
-        1. Prime 10 thumbnail SUBITO (visibili immediatamente)
-        2. Thumbnail rimanenti in background, 5 alla volta
-        3. UI sempre reattiva
-        """
-        if not self.documentgroups:
+        """Smart lazy loading - carica solo thumbnail visibili + buffer"""
+        if not hasattr(self, 'documentgroups') or not self.documentgroups:
             return
         
-        # FASE 1: Carica prime 10 thumbnail IMMEDIATAMENTE (bloccante ma veloce)
-        loaded = 0
-        priority_thumbs = []
-        
+        # Raccogli tutte le thumbnail che necessitano caricamento
+        thumbnails_to_load = []
         for group in self.documentgroups:
-            for thumbnail in group.thumbnails:
-                if loaded < 10:  # ⭐ Aumentato da 3 a 10
-                    # Carica SUBITO
-                    if hasattr(thumbnail, 'image_loaded') and not thumbnail.image_loaded:
-                        try:
-                            img = thumbnail.document_loader.get_page(thumbnail.pagenum)
-                            if img:
-                                thumbnail.set_image(img)
-                                loaded += 1
-                                self.debug_print(f"✅ Preloaded IMMEDIATE thumbnail page {thumbnail.pagenum}")
-                        except Exception as e:
-                            self.debug_print(f"❌ Error preloading thumbnail {thumbnail.pagenum}: {e}")
-                else:
-                    # Aggiungi a coda per caricamento progressivo
-                    priority_thumbs.append(thumbnail)
+            for thumb in group.thumbnails:
+                if not thumb.image_loaded and thumb.document_loader:
+                    thumbnails_to_load.append(thumb)
         
-        # FASE 2: Carica rimanenti in BACKGROUND (non bloccante)
-        self._preload_queue = priority_thumbs
-        self._preload_index = 0
+        if not thumbnails_to_load:
+            self.debug_print("✅ Tutti le thumbnail sono caricate")
+            return
         
-        if self._preload_queue:
-            self.after(20, self._preload_next_batch)  # ⭐ Batch invece di singola
+        # Ordina per priorità di viewport
+        try:
+            scroll_top = self.left_scrollable_frame.canvasy(0)
+            thumbnails_to_load.sort(key=lambda t: t.get_load_priority(scroll_top))
+        except:
+            pass  # Se errore, mantieni ordine originale
+        
+        # Carica batch di 3 thumbnail ad alta priorità
+        loaded_count = 0
+        for thumb in thumbnails_to_load[:3]:
+            try:
+                if thumb.is_in_viewport(self.left_scrollable_frame):
+                    if thumb.load_image_if_needed():
+                        loaded_count += 1
+                        # Piccola pausa per non bloccare UI
+                        if loaded_count >= 1:
+                            break
+            except Exception as e:
+                self.debug_print(f"Error in progressive loading: {e}")
+        
+        # Continua caricamento se ci sono altre thumbnail
+        if len(thumbnails_to_load) > 3:
+            # Schedule prossimo batch tra 100ms
+            self.after(100, self.preload_thumbnails_progressive)
+        else:
+            self.debug_print("🎯 Lazy loading completato per viewport corrente")
+    
+    def setup_viewport_loading(self):
+        """Setup caricamento intelligente basato su scroll"""
+        # Bind scroll events per triggering lazy loading
+        def on_scroll(*args):
+            # Trigger lazy loading quando l'utente scrolla
+            self.after_idle(self.preload_thumbnails_progressive)
+        
+        # Bind alle scrollbar se esistono
+        try:
+            if hasattr(self.left_scrollable_frame, 'yview_moveto'):
+                # Canvas scrolling
+                self.left_scrollable_frame.bind('<Configure>', lambda e: on_scroll())
+        except:
+            pass
+        
+        # Bind anche a mouse wheel
+        def on_mousewheel(event):
+            self.after(50, on_scroll)  # Lazy trigger dopo scroll
+        
+        self.left_scrollable_frame.bind('<MouseWheel>', on_mousewheel)
+        self.left_scrollable_frame.bind('<Button-4>', on_mousewheel)  # Linux
+        self.left_scrollable_frame.bind('<Button-5>', on_mousewheel)  # Linux
     
     def _preload_next_thumbnail(self):
         """Carica prossima thumbnail in background (non bloccante)"""
@@ -1465,110 +1491,282 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
     
     # inserire qui def complete_sequence
     def complete_sequence_export(self):
-        """Export images and CSV in BACKGROUND (non-blocking)"""
+        """Export images and CSV with thread-safe progress updates"""
         if not self.documentgroups:
             messagebox.showwarning("Attenzione", "Nessun documento caricato")
             return
-        
-        # Validazione documenti vuoti
+
+        # Validation before export
         if not self.validate_before_export():
             return
-        
+
+        # Get output folder
         base_output_folder = self.config_manager.get('default_output_folder', '')
-        
         if not base_output_folder:
-            messagebox.showerror("Errore", 
-                            "Cartella output non configurata.\n"
-                            "Configura la cartella nelle Preferenze.")
+            messagebox.showerror("Errore", "Cartella output non configurata. Configura la cartella nelle Preferenze.")
             return
-        
-        # Gestione struttura directory
+
+        # Handle folder structure preservation
         preserve_structure = self.config_manager.get('preserve_folder_structure', False)
-        
         if preserve_structure and self.input_folder_name:
             output_folder = os.path.join(base_output_folder, self.input_folder_name)
         else:
             output_folder = base_output_folder
-        
+
+        # Create output folder if needed
         if not os.path.exists(output_folder):
             try:
                 os.makedirs(output_folder)
             except Exception as e:
                 messagebox.showerror("Errore", f"Impossibile creare cartella output: {str(e)}")
                 return
+
+        # Setup progress window
+        self.setup_export_progress_window()
         
-        # ⭐ NUOVO: Export in BACKGROUND
+        # Start thread-safe export
+        self.export_manager.export_documents_threaded(
+            output_folder=output_folder,
+            document_groups=self.documentgroups,
+            document_name=self.current_document_name,
+            ui_callback=self.handle_export_update
+        )
+        
+        # Start processing UI queue
+        self.process_export_queue()
+
+    def setup_export_progress_window(self):
+        """Setup progress window for export operation"""
         export_format = self.config_manager.get('export_format', 'JPEG')
         
-        # Crea progress dialog PERSISTENTE
         self.export_progress_window = tk.Toplevel(self)
         self.export_progress_window.title(f"Export in Corso - {export_format}")
-        self.export_progress_window.geometry("500x150")
+        self.export_progress_window.geometry("500x180")
         self.export_progress_window.transient(self)
         self.export_progress_window.resizable(False, False)
         
-        # Frame principale
-        frame = tk.Frame(self.export_progress_window, padx=20, pady=20)
-        frame.pack(fill="both", expand=True)
+        # Center the window
+        self.export_progress_window.geometry("+%d+%d" % (
+            self.winfo_rootx() + 100, 
+            self.winfo_rooty() + 100
+        ))
         
-        # Label status
+        # Main frame
+        frame = tk.Frame(self.export_progress_window, padx=20, pady=20)
+        frame.pack(fill='both', expand=True)
+        
+        # Status label
         self.export_status_label = tk.Label(
-            frame, 
-            text="Inizializzazione export...", 
-            font=("Arial", 10)
+            frame, text="Inizializzazione export...", font=('Arial', 10)
         )
         self.export_status_label.pack(pady=(0, 10))
         
         # Progress bar
         self.export_progress_bar = ttk.Progressbar(
-            frame, 
-            mode='determinate', 
-            length=400
+            frame, mode='determinate', length=400
         )
         self.export_progress_bar.pack(pady=10)
         
-        # Label percentuale
+        # Percentage label
         self.export_percent_label = tk.Label(
-            frame, 
-            text="0%", 
-            font=("Arial", 9)
+            frame, text="0%", font=('Arial', 9)
         )
         self.export_percent_label.pack()
         
-        # ⭐ ESEGUI EXPORT IN THREAD SEPARATO
-        import threading
+        # Cancel button
+        cancel_btn = tk.Button(
+            frame, text="Annulla", 
+            command=self.cancel_export,
+            bg='#E74C3C', fg='white', font=('Arial', 9, 'bold'),
+            relief='flat', cursor='hand2'
+        )
+        cancel_btn.pack(pady=(10, 0))
         
-        def export_thread():
-            try:
-                # Callback per aggiornare progress
-                def update_progress(message):
-                    # Questo callback viene chiamato dall'export_manager
-                    self.after(0, lambda m=message: self._update_export_status(m))
+        # Handle window close
+        self.export_progress_window.protocol("WM_DELETE_WINDOW", self.cancel_export)
+
+    def handle_export_update(self, message_type, data):
+        """Handle export updates from background thread"""
+        try:
+            if message_type == 'progress':
+                # Update progress message
+                if isinstance(data, str):
+                    self.export_status_label.config(text=data)
+                elif isinstance(data, dict):
+                    if 'message' in data:
+                        self.export_status_label.config(text=data['message'])
+                    if 'progress' in data:
+                        progress = float(data['progress'])
+                        self.export_progress_bar.config(value=progress)
+                        self.export_percent_label.config(text=f"{progress:.1f}%")
+                        
+            elif message_type == 'completed':
+                # Export completed successfully
+                self.export_completed(data)
                 
-                # Export documenti
-                exported_files = self.export_manager.export_documents(
-                    output_folder, self.documentgroups, self.current_document_name, 
-                    update_progress
-                )
+            elif message_type == 'error':
+                # Export failed
+                self.export_failed(data)
                 
-                # Genera CSV
-                self.after(0, lambda: self._update_export_status("Generazione CSV..."))
-                csv_filename = self.export_csv_metadata(output_folder, exported_files)
+        except Exception as e:
+            print(f"Error handling export update: {e}")
+            self.export_failed(f"UI update error: {str(e)}")
+
+    def process_export_queue(self):
+        """Process export queue updates periodically"""
+        if hasattr(self, 'export_progress_window') and self.export_progress_window.winfo_exists():
+            # Process queue messages
+            self.export_manager._process_ui_queue(self.handle_export_update)
+            
+            # Schedule next check if not cancelled
+            if not self.export_manager.cancel_event.is_set():
+                self.after(100, self.process_export_queue)
+
+    def export_completed(self, data):
+        """Handle successful export completion"""
+        try:
+            exported_files = data.get('files', [])
+            output_folder = data.get('folder', '')
+            export_format = data.get('format', 'JPEG')
+            
+            # Close progress window
+            if hasattr(self, 'export_progress_window'):
+                self.export_progress_window.destroy()
+            
+            # Show success message
+            file_count = len(exported_files)
+            message = f"Export completato!\n\n"
+            message += f"Esportati {file_count} file in formato {export_format}\n"
+            message += f"Cartella: {output_folder}\n\n"
+            message += "Vuoi aprire la cartella di destinazione?"
+            
+            if messagebox.askyesno("Export Completato", message):
+                self.open_folder(output_folder)
                 
-                # Completato!
-                self.after(0, lambda: self._export_completed(
-                    output_folder, exported_files, csv_filename, export_format
-                ))
-                
-            except Exception as e:
-                self.after(0, lambda: self._export_error(str(e)))
+        except Exception as e:
+            print(f"Error in export completion: {e}")
+            messagebox.showerror("Errore", f"Export completato ma errore nella finalizzazione: {str(e)}")
+
+    def export_failed(self, error_message):
+        """Handle export failure"""
+        try:
+            # Close progress window
+            if hasattr(self, 'export_progress_window'):
+                self.export_progress_window.destroy()
+            
+            # Show error message
+            messagebox.showerror("Errore Export", f"Export fallito:\n\n{error_message}")
+            
+        except Exception as e:
+            print(f"Error in export failure handling: {e}")
+
+    def cancel_export(self):
+        """Cancel ongoing export operation"""
+        try:
+            # Signal cancellation to export manager
+            self.export_manager.cancel_export()
+            
+            # Close progress window
+            if hasattr(self, 'export_progress_window'):
+                self.export_progress_window.destroy()
+            
+            messagebox.showinfo("Annullato", "Export annullato dall'utente.")
+            
+        except Exception as e:
+            print(f"Error cancelling export: {e}")
+
+    def validate_before_export(self) -> bool:
+        """Validate documents before export - check for empty documents"""
+        empty_docs = []
+        for group in self.documentgroups:
+            if group.is_empty():
+                doc_name = f"{group.document_counter:04d}_{group.category_name}"
+                empty_docs.append((group, doc_name))
         
-        # Avvia thread
-        thread = threading.Thread(target=export_thread, daemon=True)
-        thread.start()
+        if empty_docs:
+            empty_list = '\n'.join([f"• {name}" for _, name in empty_docs])
+            message = f"Attenzione: trovati {len(empty_docs)} documenti senza pagine:\n\n{empty_list}\n\n"
+            message += "Questi documenti verranno saltati nell'export, causando buchi nella numerazione.\n"
+            message += "Vuoi eliminarli automaticamente prima dell'export?"
+            
+            response = messagebox.askyesnocancel("Documenti Vuoti Rilevati", message, icon='warning')
+            
+            if response is None:  # Cancel
+                return False  # Annulla export
+            elif response:  # Yes - elimina documenti vuoti
+                for group, _ in empty_docs:
+                    if group in self.documentgroups:
+                        self.documentgroups.remove(group)
+                        group.destroy()
+                
+                self.renumber_documents()
+                self.after_idle(self.update_scroll_region)
+                messagebox.showinfo("Documenti Eliminati", 
+                                f"Eliminati {len(empty_docs)} documenti vuoti. Numerazione aggiornata.")
+                return True  # Procedi con export
+            else:  # No - procedi comunque
+                messagebox.showwarning("Attenzione", 
+                                    "L'export procederà con buchi nella numerazione dei file.\n"
+                                    "Es: doc001, doc003, doc005...")
+                return True  # Procedi con export
         
-        # Permetti all'utente di continuare a lavorare!
-        self.debug_print("🚀 Export avviato in background - UI libera!")
+        return True  # Nessun documento vuoto, procedi
+
+
+    def open_folder(self, folder_path):
+        """Open folder in system file manager"""
+        try:
+            import platform
+            import subprocess
+            
+            system = platform.system()
+            if system == "Windows":
+                os.startfile(folder_path)
+            elif system == "Darwin":  # macOS
+                subprocess.run(["open", folder_path])
+            else:  # Linux
+                subprocess.run(["xdg-open", folder_path])
+                
+        except Exception as e:
+            print(f"Error opening folder: {e}")
+            messagebox.showwarning("Attenzione", f"Impossibile aprire la cartella: {str(e)}")
+
+    def validate_before_export(self) -> bool:
+        """Validate documents before export - check for empty documents"""
+        empty_docs = []
+        for group in self.documentgroups:
+            if group.is_empty():
+                doc_name = f"{group.document_counter:04d}_{group.category_name}"
+                empty_docs.append((group, doc_name))
+        
+        if empty_docs:
+            empty_list = '\n'.join([f"• {name}" for _, name in empty_docs])
+            message = f"Attenzione: trovati {len(empty_docs)} documenti senza pagine:\n\n{empty_list}\n\n"
+            message += "Questi documenti verranno saltati nell'export, causando buchi nella numerazione.\n"
+            message += "Vuoi eliminarli automaticamente prima dell'export?"
+            
+            response = messagebox.askyesnocancel("Documenti Vuoti Rilevati", message, icon='warning')
+            
+            if response is None:  # Cancel
+                return False  # Annulla export
+            elif response:  # Yes - elimina documenti vuoti
+                for group, _ in empty_docs:
+                    if group in self.documentgroups:
+                        self.documentgroups.remove(group)
+                        group.destroy()
+                
+                self.renumber_documents()
+                self.after_idle(self.update_scroll_region)
+                messagebox.showinfo("Documenti Eliminati", 
+                                f"Eliminati {len(empty_docs)} documenti vuoti. Numerazione aggiornata.")
+                return True  # Procedi con export
+            else:  # No - procedi comunque
+                messagebox.showwarning("Attenzione", 
+                                    "L'export procederà con buchi nella numerazione dei file.\n"
+                                    "Es: doc001, doc003, doc005...")
+                return True  # Procedi con export
+        
+        return True  # Nessun documento vuoto, procedi
     
     def _update_export_status(self, message):
         """Aggiorna status label durante export (chiamato da thread)"""
