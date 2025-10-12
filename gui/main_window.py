@@ -820,7 +820,7 @@ class AIDOXAApp(tk.Tk):
         if self.selected_group:
             if new_category != self.selected_group.categoryname:
                 old_category = self.selected_group.categoryname
-                self.selected_group.update_category_name(new_category)
+                self.selected_group.update_categoryname(new_category)
                 self.page_info_label.config(text=f"Documento: {new_category} ({len(self.selected_group.pages)} pagine)")
                 
                 self.category_db.add_category(new_category)
@@ -980,7 +980,7 @@ class AIDOXAApp(tk.Tk):
                 self.update_category_combo()
                 if self.selected_group and new_category != self.selected_group.categoryname:
                     old_category = self.selected_group.categoryname
-                    self.selected_group.update_category_name(new_category)
+                    self.selected_group.update_categoryname(new_category)
                     self.page_info_label.config(text=f"Documento: {new_category} ({len(self.selected_group.pages)} pagine)")
                     
                     if self.selected_thumbnail:
@@ -1532,6 +1532,48 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             ui_callback=self.handle_export_update
         )
         
+        # Export CSV metadata dopo aver avviato l'export PDF
+        try:
+            documents_metadata = []
+            
+            for group in self.documentgroups:
+                if not group.is_empty():
+                    # Colleziona metadati per ogni documento
+                    doc_metadata = {
+                        'Numero_Documento': f"{group.document_counter:04d}",
+                        'Categoria': group.categoryname,
+                        'Numero_Pagine': group.get_page_count(),
+                        'Nome_File': f"completo_doc{group.document_counter:04d}_{group.categoryname}",
+                    }
+                    
+                    # Aggiungi metadati header se presenti
+                    for key, value in self.header_metadata.items():
+                        if value:  # Solo se il valore non è vuoto
+                            doc_metadata[key] = value
+                    
+                    documents_metadata.append(doc_metadata)
+            
+            # ✅ Export CSV usando il metodo CORRETTO (self.export_csv_metadata)
+            if documents_metadata:
+                csv_path = self.export_csv_metadata(
+                    output_folder=output_folder,
+                    exported_files=[],
+                    input_file_name=self.current_document_name  # ✅ AGGIUNTO
+                )
+                
+                if csv_path:
+                    self.debug_print(f"✅ CSV exported successfully: {csv_path}")
+                else:
+                    self.debug_print("⚠️ CSV export skipped by user")
+                    
+        except Exception as e:
+            self.debug_print(f"❌ CSV Export Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+        # Start processing UI queue
+        self.process_export_queue()
+        
         # Start processing UI queue
         self.process_export_queue()
 
@@ -1680,7 +1722,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         empty_docs = []
         for group in self.documentgroups:
             if group.is_empty():
-                doc_name = f"{group.document_counter:04d}_{group.category_name}"
+                doc_name = f"{group.document_counter:04d}_{group.categoryname}"
                 empty_docs.append((group, doc_name))
         
         if empty_docs:
@@ -1736,7 +1778,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         empty_docs = []
         for group in self.documentgroups:
             if group.is_empty():
-                doc_name = f"{group.document_counter:04d}_{group.category_name}"
+                doc_name = f"{group.document_counter:04d}_{group.categoryname}"
                 empty_docs.append((group, doc_name))
         
         if empty_docs:
@@ -1830,21 +1872,53 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.after_idle(self.update_scroll_region)
         self.debug_print("Workspace reset completed")
         
-    def export_csv_metadata(self, output_folder: str, exported_files: List[str]) -> str:
-        """Export CSV file with dynamic metadata - respects file handling settings"""
+    def export_csv_metadata(self, output_folder: str, exported_files: List[str], 
+                       input_file_name: Optional[str] = None) -> str:
+        """Export CSV file with dynamic metadata - respects file handling settings
+        
+        Args:
+            output_folder: Output directory path
+            exported_files: List of exported file names
+            input_file_name: Original document name (for naming CSV file)
+        
+        Returns:
+            CSV filename or empty string if cancelled
+        """
         # Logica nome file CSV - Priorità: Custom > Documento > Cartella
+        # ========================================
+        # 🔧 FIX: Logica nome file CSV corretta
+        # ========================================
         custom_name = self.config_manager.get('csv_custom_name', '').strip()
         use_doc_name = self.config_manager.get('csv_use_document_name', False)
-    
+
         if custom_name:
             # Priorità 1: Nome personalizzato
             csv_filename = f"{custom_name}.csv"
-        elif use_doc_name and self.current_document_name:
-            # Priorità 2: Nome documento (sempre usa questo come default)
-            csv_filename = f"{self.current_document_name}.csv"
+            self.debug_print(f"CSV naming: CUSTOM - {csv_filename}")
+            
+        elif use_doc_name:
+            # Priorità 2: Nome documento (FLAG ABILITATO)
+            if input_file_name:
+                csv_filename = f"{input_file_name}.csv"
+                self.debug_print(f"CSV naming: DOCUMENT NAME (from param) - {csv_filename}")
+            elif self.current_document_name:
+                csv_filename = f"{self.current_document_name}.csv"
+                self.debug_print(f"CSV naming: DOCUMENT NAME (current) - {csv_filename}")
+            else:
+                # Fallback: nome cartella
+                csv_filename = f"{self.input_folder_name}.csv" if self.input_folder_name else "metadata.csv"
+                self.debug_print(f"CSV naming: FALLBACK - {csv_filename}")
+                
         else:
-            # Priorità 3: Nome documento (DEFAULT - non più cartella)
-            csv_filename = f"{self.current_document_name}.csv" if self.current_document_name else f"{self.input_folder_name}.csv"
+            # Priorità 3: Nome cartella (FLAG DISABILITATO - DEFAULT)
+            if self.input_folder_name:
+                csv_filename = f"{self.input_folder_name}.csv"
+                self.debug_print(f"CSV naming: FOLDER NAME - {csv_filename}")
+            else:
+                # ❌ RIMUOVI FALLBACK input_file_name quando flag è disabilitato!
+                # Usa solo metadata.csv generico
+                csv_filename = "metadata.csv"
+                self.debug_print(f"CSV naming: GENERIC FALLBACK (no folder name) - {csv_filename}")
         
         csv_path = os.path.join(output_folder, csv_filename)
     
