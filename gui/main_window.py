@@ -1024,7 +1024,7 @@ class AIDOXAApp(tk.Tk):
     def refresh_document_list(self):
         """Load document from configured input folder - supports both modes"""
         input_folder = self.config_manager.get('default_input_folder', '')
-    
+
         if not input_folder or not os.path.exists(input_folder):
             messagebox.showerror("Errore", 
                             "Cartella input non configurata o non esistente.\n"
@@ -1033,19 +1033,92 @@ class AIDOXAApp(tk.Tk):
 
         self.input_folder_name = os.path.basename(os.path.normpath(input_folder))
 
+        # ========================================
+        # 🔧 FIX DEFINITIVO: Supporto cartella JSON separata
+        # ========================================
+
+        # Leggi configurazione JSON folder
+        use_same_folder_flag = self.config_manager.get('use_same_folder_for_json', True)
+        json_folder_config = self.config_manager.get('json_folder', '').strip()
+
+        # 🚨 CRITICAL DEBUG - Stampa configurazione corrente
+        self.debug_print("=== JSON Configuration Debug ===")
+        self.debug_print(f"input_folder: {input_folder}")
+        self.debug_print(f"use_same_folder_for_json FLAG: {use_same_folder_flag}")
+        self.debug_print(f"json_folder CONFIG: '{json_folder_config}'")
+
+        # Determina quale cartella usare per il JSON
+        # LOGICA: Se flag è TRUE → usa stessa cartella
+        #         Se flag è FALSE → usa cartella separata (se configurata)
+        if use_same_folder_flag:
+            # ✅ MODALITÀ 1: Usa la stessa cartella del documento (checkbox ABILITATO)
+            json_folder = input_folder
+            self.debug_print(f"✅ MODE: SAME FOLDER → {json_folder}")
+        else:
+            # ✅ MODALITÀ 2: Usa cartella JSON separata (checkbox DISABILITATO)
+            if not json_folder_config:
+                # Se non configurata, fallback a stessa cartella
+                messagebox.showwarning("Attenzione",
+                            "Checkbox 'Usa stessa cartella' disabilitato ma nessuna "
+                            "cartella JSON separata configurata.\n\n"
+                            "Verrà usata la stessa cartella del documento.")
+                json_folder = input_folder
+                self.debug_print(f"⚠️ MODE: SEPARATE FOLDER (fallback to same) → {json_folder}")
+            else:
+                json_folder = json_folder_config
+                
+                # Verifica che la cartella esista
+                if not os.path.exists(json_folder):
+                    messagebox.showerror("Errore", 
+                                f"La cartella JSON separata non esiste:\n{json_folder}\n\n"
+                                "Verifica il percorso nelle Preferenze → Percorsi.")
+                    return
+                
+                self.debug_print(f"✅ MODE: SEPARATE FOLDER → {json_folder}")
+
+        self.debug_print("================================")
+        
         json_file = None
         doc_file = None
-    
-        for file in os.listdir(input_folder):
-            if file.lower().endswith('.json'):
-                json_file = os.path.join(input_folder, file)
-            elif file.lower().endswith(('.pdf', '.tiff', '.tif')):
-                doc_file = os.path.join(input_folder, file)
 
-        if not json_file or not doc_file:
+        # Cerca documento nella cartella input
+        for file in os.listdir(input_folder):
+            if file.lower().endswith(('.pdf', '.tiff', '.tif')):
+                doc_file = os.path.join(input_folder, file)
+                break  # Prendi il primo documento trovato
+        
+        # Cerca JSON nella cartella appropriata (json_folder è già stato determinato sopra)
+        try:
+            for file in os.listdir(json_folder):
+                if file.lower().endswith('.json'):
+                    json_file = os.path.join(json_folder, file)
+                    break  # Prendi il primo JSON trovato
+        except Exception as e:
             messagebox.showerror("Errore", 
-                           "Cartella input deve contenere un file JSON e un documento PDF/TIFF")
+                        f"Errore lettura cartella JSON:\n{json_folder}\n\n"
+                        f"Dettaglio: {str(e)}")
             return
+
+        # ✅ VALIDAZIONE FILE TROVATI (indentazione corretta - stesso livello del try/except sopra)
+        if not doc_file:
+            messagebox.showerror("Errore", 
+                        "Nessun documento PDF/TIFF trovato nella cartella input:\n"
+                        f"{input_folder}")
+            return
+        
+        if not json_file:
+            if use_separate_json:
+                messagebox.showerror("Errore", 
+                            f"Nessun file JSON trovato nella cartella JSON separata:\n"
+                            f"{json_folder}")
+            else:
+                messagebox.showerror("Errore", 
+                            "Nessun file JSON trovato nella cartella input:\n"
+                            f"{input_folder}")
+            return
+        
+        self.debug_print(f"Found document: {doc_file}")
+        self.debug_print(f"Found JSON: {json_file}")
 
         try:
             with open(json_file, "r", encoding="utf-8") as f:
