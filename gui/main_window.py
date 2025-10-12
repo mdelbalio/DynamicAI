@@ -1105,16 +1105,17 @@ class AIDOXAApp(tk.Tk):
                         "Nessun documento PDF/TIFF trovato nella cartella input:\n"
                         f"{input_folder}")
             return
-        
+
         if not json_file:
-            if use_separate_json:
+            # Messaggio dinamico basato su quale cartella è stata usata
+            if json_folder == input_folder:
                 messagebox.showerror("Errore", 
-                            f"Nessun file JSON trovato nella cartella JSON separata:\n"
-                            f"{json_folder}")
+                            f"Nessun file JSON trovato nella cartella:\n{json_folder}\n\n"
+                            "Il file JSON deve trovarsi nella stessa cartella del documento.")
             else:
                 messagebox.showerror("Errore", 
-                            "Nessun file JSON trovato nella cartella input:\n"
-                            f"{input_folder}")
+                            f"Nessun file JSON trovato nella cartella JSON separata:\n{json_folder}\n\n"
+                            "Verifica che il file JSON si trovi nella cartella corretta.")
             return
         
         self.debug_print(f"Found document: {doc_file}")
