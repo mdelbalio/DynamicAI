@@ -161,6 +161,8 @@ pyinstaller DynamicAI_with_icon.spec
 ### Build eseguibile (Windows, PyInstaller) senza la console
 ```bash
 pyinstaller --noconsole --onefile DynamicAI_with_icon.spec
+pyinstaller DynamicAI_with_icon.spec
+pyinstaller --noconsole --onefile --icon=assets/icons/app.ico main.py
 # oppure: pyinstaller --noconfirm DynamicAI_with_icon.spec
 ```
 L’eseguibile userà `assets/icons/documentai.ico` come icona.

@@ -1038,39 +1038,44 @@ class AIDOXAApp(tk.Tk):
         # ========================================
 
         # Leggi configurazione JSON folder
-        # ✅ FIX: Leggi configurazione JSON folder - CHIAVI CORRETTE
-        use_separate_json_folder = self.config_manager.get('use_separate_json_folder', False)
-        separate_json_folder_path = self.config_manager.get('separate_json_folder_path', '').strip()
+        # ✅ Leggi configurazione con CHIAVI CORRETTE
+        use_same_folder_flag = self.config_manager.get('use_same_folder_for_json', True)
+        json_folder_config = self.config_manager.get('json_folder', '').strip()
 
 
         # 🚨 CRITICAL DEBUG - Stampa configurazione corrente
         self.debug_print("=== JSON Configuration Debug ===")
         self.debug_print(f"input_folder: {input_folder}")
-        self.debug_print(f"use_separate_json_folder FLAG: {use_separate_json_folder}")
-        self.debug_print(f"separate_json_folder_path CONFIG: '{separate_json_folder_path}'")
+        self.debug_print(f"use_same_folder_for_json FLAG: {use_same_folder_flag}")
+        self.debug_print(f"json_folder CONFIG: '{json_folder_config}'")
 
         # Determina quale cartella usare per il JSON
         # LOGICA: Se flag è TRUE → usa stessa cartella
-        #         Se flag è FALSE → usa cartella separata (se configurata)
-        if use_separate_json_folder:
-            # ✅ MODALITÀ: Usa cartella JSON separata
-            if not separate_json_folder_path:
-                messagebox.showerror("Errore", 
-                            "Cartella JSON separata abilitata ma percorso non configurato.\n\n"
-                            "Configura il percorso nelle Preferenze → Percorsi.")
-                return  # ✅ Return solo se c'è errore
-            
-            json_folder = separate_json_folder_path
-            
-            # Verifica che la cartella esista
-            if not os.path.exists(json_folder):
-                messagebox.showerror("Errore", 
-                            f"La cartella JSON separata non esiste:\n{json_folder}\n\n"
-                            "Verifica il percorso nelle Preferenze → Percorsi.")
-                return  # ✅ Return solo se c'è errore
-        else:
-            # ✅ MODALITÀ: Usa la stessa cartella del documento
+        #         Se flag è FALSE → usa cartella separata
+        if use_same_folder_flag:
+            # ✅ MODALITÀ 1: Usa la stessa cartella del documento (checkbox ABILITATO)
             json_folder = input_folder
+            self.debug_print(f"✅ MODE: SAME FOLDER → {json_folder}")
+        else:
+            # ✅ MODALITÀ 2: Usa cartella JSON separata (checkbox DISABILITATO)
+            if not json_folder_config:
+                messagebox.showwarning("Attenzione",
+                            "Checkbox 'Usa stessa cartella' disabilitato ma nessuna "
+                            "cartella JSON separata configurata.\n\n"
+                            "Verrà usata la stessa cartella del documento.")
+                json_folder = input_folder
+                self.debug_print(f"⚠️ MODE: SEPARATE FOLDER (fallback to same) → {json_folder}")
+            else:
+                json_folder = json_folder_config
+                
+                # Verifica che la cartella esista
+                if not os.path.exists(json_folder):
+                    messagebox.showerror("Errore", 
+                                f"La cartella JSON separata non esiste:\n{json_folder}\n\n"
+                                "Verifica il percorso nelle Preferenze → Percorsi.")
+                    return
+                
+                self.debug_print(f"✅ MODE: SEPARATE FOLDER → {json_folder}")
 
         # ✅ Il codice continua normalmente per entrambi i casi
         self.debug_print(f"✅ JSON FOLDER: {json_folder}")
@@ -1106,11 +1111,17 @@ class AIDOXAApp(tk.Tk):
             return
 
         if not json_file:
-            # Messaggio dinamico basato su quale cartella è stata usata
-            if use_separate_json_folder:
-                messagebox.showerror("Errore", f"Nessun file JSON trovato nella cartella JSON separata:\n{json_folder}\n\nVerifica che il file JSON si trovi nella cartella corretta.")
+            # Messaggio dinamico basato su quale cartella è stata usata per il JSON
+            if json_folder == input_folder:
+                # Stesso percorso = checkbox era abilitato
+                messagebox.showerror("Errore", 
+                            f"Nessun file JSON trovato nella cartella:\n{json_folder}\n\n"
+                            "Il file JSON deve trovarsi nella stessa cartella del documento.")
             else:
-                messagebox.showerror("Errore", f"Nessun file JSON trovato nella cartella:\n{json_folder}\n\nIl file JSON deve trovarsi nella stessa cartella del documento.")
+                # Percorso diverso = cartella separata configurata
+                messagebox.showerror("Errore", 
+                            f"Nessun file JSON trovato nella cartella JSON separata:\n{json_folder}\n\n"
+                            "Verifica che il file JSON si trovi nella cartella corretta.")
             return
         
         self.debug_print(f"Found document: {doc_file}")
