@@ -1377,22 +1377,26 @@ class AIDOXAApp(tk.Tk):
             return
         
         # Ordina per priorità di viewport
+        # Ordina per priorità di viewport
         try:
-            scroll_top = self.left_scrollable_frame.canvasy(0)
+            # ✅ FIX: Usa self.canvas invece di left_scrollable_frame
+            scroll_top = self.canvas.canvasy(0)
             thumbnails_to_load.sort(key=lambda t: t.get_load_priority(scroll_top))
-        except:
-            pass  # Se errore, mantieni ordine originale
+        except Exception as e:
+            # Se errore, mantieni ordine originale
+            self.debug_print(f"Cannot determine scroll position: {e}")
+            pass
         
         # Carica batch di 3 thumbnail ad alta priorità
         loaded_count = 0
         for thumb in thumbnails_to_load[:3]:
             try:
-                if thumb.is_in_viewport(self.left_scrollable_frame):
-                    if thumb.load_image_if_needed():
-                        loaded_count += 1
-                        # Piccola pausa per non bloccare UI
-                        if loaded_count >= 1:
-                            break
+                # ✅ FIX: Rimuovi controllo viewport (non necessario, thumbnails_to_load è già ordinato)
+                if thumb.load_image_if_needed():
+                    loaded_count += 1
+                    # Piccola pausa per non bloccare UI
+                    if loaded_count >= 1:
+                        break
             except Exception as e:
                 self.debug_print(f"Error in progressive loading: {e}")
         

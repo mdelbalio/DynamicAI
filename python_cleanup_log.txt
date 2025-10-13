@@ -1,17 +1,36 @@
 ====================================================== 
 PULIZIA COMPLETA CACHE PYTHON 
 ====================================================== 
-Operazione avviata: 12/10/2025 - 22:25:52,03 
+Operazione avviata: 13/10/2025 - 21:55:00,43 
 Directory: C:\Users\test\Desktop\PythonMDB\DynamicAI 
  
  
 [FASE 1] CARTELLE __pycache__ 
 ---------------------------------------- 
-  Totale cartelle rimosse: 0 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\batch\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\config\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\database\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\export\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\components\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\dialogs\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\loaders\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\utils\__pycache__ 
+  Totale cartelle rimosse: 9 
  
 [FASE 2] FILE .pyc (Bytecode Compilato) 
 ---------------------------------------- 
-  Totale file .pyc rimossi: 0 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\DynamicAI_with_icon\localpycs\pyimod01_archive.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\DynamicAI_with_icon\localpycs\pyimod02_importers.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\DynamicAI_with_icon\localpycs\pyimod03_ctypes.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\DynamicAI_with_icon\localpycs\pyimod04_pywin32.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\DynamicAI_with_icon\localpycs\struct.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\main\localpycs\pyimod01_archive.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\main\localpycs\pyimod02_importers.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\main\localpycs\pyimod03_ctypes.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\main\localpycs\pyimod04_pywin32.pyc 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\build\main\localpycs\struct.pyc 
+  Totale file .pyc rimossi: 10 
  
 [FASE 3] FILE .pyo (Bytecode Ottimizzato) 
 ---------------------------------------- 
@@ -20,17 +39,45 @@ Directory: C:\Users\test\Desktop\PythonMDB\DynamicAI
 [FASE 4] FILE .pyd (Estensioni Compilate) 
 ---------------------------------------- 
 ATTENZIONE: File .pyd potrebbero essere necessari 
-  Totale file .pyd rimossi: 0 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\pyexpat.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\select.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\unicodedata.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_asyncio.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_bz2.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_ctypes.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_decimal.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_elementtree.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_hashlib.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_lzma.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_multiprocessing.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_overlapped.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_queue.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_socket.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_sqlite3.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_ssl.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_tkinter.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_uuid.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\_wmi.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\PIL\_avif.cp313-win_amd64.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\PIL\_imaging.cp313-win_amd64.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\PIL\_imagingcms.cp313-win_amd64.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\PIL\_imagingft.cp313-win_amd64.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\PIL\_imagingmath.cp313-win_amd64.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\PIL\_imagingtk.cp313-win_amd64.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\PIL\_webp.cp313-win_amd64.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\pymupdf\_extra.pyd 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\dist\DynamicAI\_internal\pymupdf\_mupdf.pyd 
+  Totale file .pyd rimossi: 28 
   File .pyd NON rimossi (utente ha scelto NO) 
  
 ====================================================== 
 RIEPILOGO OPERAZIONE 
 ====================================================== 
-Cartelle __pycache__ rimosse: 0 
-File .pyc rimossi: 0 
+Cartelle __pycache__ rimosse: 9 
+File .pyc rimossi: 10 
 File .pyo rimossi: 0 
-File .pyd rimossi: 0 
-TOTALE ELEMENTI RIMOSSI: 0 
+File .pyd rimossi: 28 
+TOTALE ELEMENTI RIMOSSI: 47 
  
-Operazione completata: 12/10/2025 - 22:25:54,27 
+Operazione completata: 13/10/2025 - 21:55:05,66 
 ====================================================== 
