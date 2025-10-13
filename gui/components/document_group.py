@@ -314,7 +314,7 @@ class DocumentGroup:
         
         return optimal_per_row
 
-    def update_category_name(self, new_name: str):
+    def update_categoryname(self, new_name: str):
         """Update the category name display"""
         self.categoryname = new_name
         
