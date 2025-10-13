@@ -8,11 +8,7 @@ Aggiunte:
 
 import os
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
-# Add import for new CategoryDatabase
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from tkinter import ttk, filedialog, messagebox
 
 class SettingsDialog:
     """Dialog per configurazione applicazione"""
@@ -573,94 +569,333 @@ Workflow supportati:
                 font=("Arial", 9)).pack(anchor="w")
 
     def create_categories_tab(self):
-        """Create categories management tab with dynamic JSON awareness"""
-        categories_frame = ttk.Frame(self.notebook)
-        self.notebook.add(categories_frame, text="Categorie")
+        """Tab gestione categorie"""
+        frame = ttk.Frame(self.notebook)
+        self.notebook.add(frame, text="Categorie")
         
-        # Main container
-        main_frame = ttk.Frame(categories_frame)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        # Header
+        tk.Label(frame, text="Gestione Categorie Database:",
+                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
         
-        # Title and stats
-        title_frame = ttk.Frame(main_frame)
-        title_frame.pack(fill="x", pady=(0, 10))
+        tk.Label(frame, text="Visualizza, aggiungi o elimina categorie salvate nel database.",
+                font=("Arial", 9), fg="gray").pack(anchor="w", padx=10, pady=(0, 10))
         
-        title_label = ttk.Label(title_frame, text="Gestione Categorie", font=("Arial", 12, "bold"))
-        title_label.pack(side="left")
+        # Search frame
+        search_frame = tk.Frame(frame)
+        search_frame.pack(fill="x", padx=10, pady=5)
         
-        # Stats label (updated dynamically)
-        self.stats_label = ttk.Label(title_frame, text="", font=("Arial", 9))
-        self.stats_label.pack(side="right")
+        tk.Label(search_frame, text="🔍 Cerca:", font=("Arial", 9)).pack(side="left")
+        self.category_search_var = tk.StringVar()
+        self.category_search_var.trace('w', lambda *args: self.filter_categories())
+        search_entry = tk.Entry(search_frame, textvariable=self.category_search_var, 
+                            font=("Arial", 9), width=30)
+        search_entry.pack(side="left", padx=5, fill="x", expand=True)
         
-        # Categories list with enhanced display
-        list_frame = ttk.LabelFrame(main_frame, text="Categorie Disponibili", padding=10)
-        list_frame.pack(fill="both", expand=True, pady=(0, 10))
+        # List frame con scrollbar
+        list_frame = tk.Frame(frame)
+        list_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # Create Treeview for better category display
-        columns = ('name', 'source', 'usage', 'status')
-        self.categories_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=12)
+        # Scrollbar
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
         
-        # Configure columns
-        self.categories_tree.heading('name', text='Nome Categoria')
-        self.categories_tree.heading('source', text='Origine')
-        self.categories_tree.heading('usage', text='Utilizzi')
-        self.categories_tree.heading('status', text='Stato')
+        # Listbox per categorie
+        self.categories_listbox = tk.Listbox(
+            list_frame, 
+            font=("Arial", 9),
+            selectmode=tk.EXTENDED,  # Selezione multipla
+            yscrollcommand=scrollbar.set,
+            height=15
+        )
+        self.categories_listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=self.categories_listbox.yview)
         
-        self.categories_tree.column('name', width=200, anchor='w')
-        self.categories_tree.column('source', width=80, anchor='center')
-        self.categories_tree.column('usage', width=80, anchor='center')
-        self.categories_tree.column('status', width=120, anchor='center')
-        
-        # Scrollbar for treeview
-        tree_scroll = ttk.Scrollbar(list_frame, orient="vertical", command=self.categories_tree.yview)
-        self.categories_tree.configure(yscrollcommand=tree_scroll.set)
-        
-        self.categories_tree.pack(side="left", fill="both", expand=True)
-        tree_scroll.pack(side="right", fill="y")
+        # Bind doppio click per modifica
+        self.categories_listbox.bind('<Double-Button-1>', lambda e: self.edit_category())
         
         # Buttons frame
-        buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.pack(fill="x", pady=(10, 0))
+        buttons_frame = tk.Frame(frame)
+        buttons_frame.pack(fill="x", padx=10, pady=10)
         
-        # Left side buttons
-        left_buttons = ttk.Frame(buttons_frame)
-        left_buttons.pack(side="left")
+        # Aggiungi button
+        tk.Button(buttons_frame, text="➕ Aggiungi", 
+                command=self.add_category,
+                bg="#4CAF50", fg="white", font=("Arial", 9, "bold"),
+                relief="flat", cursor="hand2", padx=10, pady=5).pack(side="left", padx=5)
         
-        add_btn = ttk.Button(left_buttons, text="➕ Aggiungi", command=self.add_category)
-        add_btn.pack(side="left", padx=(0, 5))
+        # Modifica button
+        tk.Button(buttons_frame, text="✏️ Modifica", 
+                command=self.edit_category,
+                bg="#2196F3", fg="white", font=("Arial", 9, "bold"),
+                relief="flat", cursor="hand2", padx=10, pady=5).pack(side="left", padx=5)
         
-        edit_btn = ttk.Button(left_buttons, text="✏️ Modifica", command=self.edit_category)
-        edit_btn.pack(side="left", padx=5)
+        # Elimina button
+        tk.Button(buttons_frame, text="🗑️ Elimina", 
+                command=self.delete_categories,
+                bg="#F44336", fg="white", font=("Arial", 9, "bold"),
+                relief="flat", cursor="hand2", padx=10, pady=5).pack(side="left", padx=5)
         
-        delete_btn = ttk.Button(left_buttons, text="🗑️ Elimina", command=self.delete_category)
-        delete_btn.pack(side="left", padx=5)
+        # Refresh button
+        tk.Button(buttons_frame, text="🔄 Aggiorna", 
+                command=self.load_categories,
+                bg="#FF9800", fg="white", font=("Arial", 9, "bold"),
+                relief="flat", cursor="hand2", padx=10, pady=5).pack(side="left", padx=5)
         
-        # Right side buttons
-        right_buttons = ttk.Frame(buttons_frame)
-        right_buttons.pack(side="right")
+        # Info frame
+        info_frame = tk.LabelFrame(frame, text="Informazioni", padx=10, pady=10)
+        info_frame.pack(fill="x", padx=10, pady=(5, 10))
         
-        refresh_btn = ttk.Button(right_buttons, text="🔄 Aggiorna", command=self.refresh_categories)
-        refresh_btn.pack(side="left", padx=5)
+        self.categories_info_label = tk.Label(info_frame, text="", 
+                                            font=("Arial", 9), justify="left")
+        self.categories_info_label.pack(anchor="w")
         
-        cleanup_btn = ttk.Button(right_buttons, text="🧹 Pulizia", command=self.cleanup_categories)
-        cleanup_btn.pack(side="left", padx=(5, 0))
+        # Carica categorie iniziali
+        self.load_categories()
+
+    def load_categories(self):
+        """Carica categorie dal database"""
+        try:
+            # Importa CategoryDatabase
+            from database.category_db import CategoryDatabase
+            from config import DB_FILE
+            
+            category_db = CategoryDatabase(DB_FILE)
+            db_categories = category_db.get_all_categories()
+            
+            # Pulisci listbox
+            self.categories_listbox.delete(0, tk.END)
+            
+            # Store categories per filtering
+            self.all_categories = sorted(db_categories)
+            
+            # Popola listbox
+            for cat in self.all_categories:
+                self.categories_listbox.insert(tk.END, f"💾 {cat}")
+            
+            # Aggiorna info
+            info_text = f"Categorie totali: {len(db_categories)}\n"
+            info_text += f"Database: {len(db_categories)}"
+            self.categories_info_label.config(text=info_text)
+            
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore caricamento categorie:\n{str(e)}")
+
+    def filter_categories(self):
+        """Filtra categorie in base alla ricerca"""
+        search_term = self.category_search_var.get().lower()
         
-        # Info frame for explanations
-        info_frame = ttk.LabelFrame(main_frame, text="Legenda", padding=10)
-        info_frame.pack(fill="x", pady=(10, 0))
+        # Pulisci listbox
+        self.categories_listbox.delete(0, tk.END)
         
-        info_text = """🔒 Categorie JSON: Protette, derivate dal file JSON corrente (non eliminabili)
-👤 Categorie Manuali: Aggiunte dall'utente (eliminabili se non utilizzate)
-📊 Utilizzi: Numero di volte che la categoria è stata utilizzata"""
+        # Filtra e mostra
+        for cat in self.all_categories:
+            if search_term in cat.lower():
+                self.categories_listbox.insert(tk.END, f"💾 {cat}")
+
+    def add_category(self):
+        """Aggiungi nuova categoria"""
+        # Dialog per input
+        dialog = tk.Toplevel(self.dialog)
+        dialog.title("Aggiungi Categoria")
+        dialog.geometry("400x150")
+        dialog.transient(self.dialog)
+        dialog.grab_set()
         
-        info_label = ttk.Label(info_frame, text=info_text, font=("Arial", 9))
-        info_label.pack(anchor="w")
+        # Center dialog
+        dialog.geometry("+%d+%d" % (
+            self.dialog.winfo_x() + 50,
+            self.dialog.winfo_y() + 50
+        ))
         
-        # Load categories initially
-        self.refresh_categories()
+        # Label
+        tk.Label(dialog, text="Nome Categoria:", font=("Arial", 10, "bold")).pack(pady=10)
         
-        # Bind double-click for editing
-        self.categories_tree.bind("<Double-1>", lambda e: self.edit_category())
+        # Entry
+        entry_var = tk.StringVar()
+        entry = tk.Entry(dialog, textvariable=entry_var, font=("Arial", 10), width=30)
+        entry.pack(pady=5)
+        entry.focus()
+    
+        def save_category():
+            new_category = entry_var.get().strip()
+            
+            if not new_category:
+                messagebox.showwarning("Attenzione", "Inserisci un nome categoria valido.")
+                return
+            
+            # Controlla duplicati
+            if new_category in self.all_categories:
+                messagebox.showwarning("Attenzione", 
+                                    f"La categoria '{new_category}' esiste già.")
+                return
+            
+            try:
+                from database.category_db import CategoryDatabase
+                from config import DB_FILE
+                
+                category_db = CategoryDatabase(DB_FILE)
+                if category_db.add_category(new_category):
+                    messagebox.showinfo("Successo", 
+                                    f"Categoria '{new_category}' aggiunta con successo!")
+                    dialog.destroy()
+                    self.load_categories()  # Ricarica lista
+                else:
+                    messagebox.showerror("Errore", "Errore durante il salvataggio.")
+            except Exception as e:
+                messagebox.showerror("Errore", f"Errore: {str(e)}")
+        
+        # Buttons
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=20)
+        
+        tk.Button(btn_frame, text="Salva", command=save_category,
+                bg="#4CAF50", fg="white", font=("Arial", 9, "bold"),
+                relief="flat", cursor="hand2", padx=15, pady=5).pack(side="left", padx=5)
+        
+        tk.Button(btn_frame, text="Annulla", command=dialog.destroy,
+                bg="#9E9E9E", fg="white", font=("Arial", 9, "bold"),
+                relief="flat", cursor="hand2", padx=15, pady=5).pack(side="left", padx=5)
+        
+        # Bind Enter key
+        entry.bind('<Return>', lambda e: save_category())
+
+    def edit_category(self):
+        """Modifica categoria selezionata"""
+        selection = self.categories_listbox.curselection()
+        
+        if not selection:
+            messagebox.showwarning("Attenzione", "Seleziona una categoria da modificare.")
+            return
+        
+        if len(selection) > 1:
+            messagebox.showwarning("Attenzione", "Seleziona una sola categoria da modificare.")
+            return
+        
+        # Ottieni categoria selezionata
+        selected_text = self.categories_listbox.get(selection[0])
+        old_category = selected_text.replace("💾 ", "").strip()
+        
+        # Dialog per modifica
+        dialog = tk.Toplevel(self.dialog)
+        dialog.title("Modifica Categoria")
+        dialog.geometry("400x150")
+        dialog.transient(self.dialog)
+        dialog.grab_set()
+        
+        # Center dialog
+        dialog.geometry("+%d+%d" % (
+            self.dialog.winfo_x() + 50,
+            self.dialog.winfo_y() + 50
+        ))
+        
+        # Label
+        tk.Label(dialog, text=f"Modifica: {old_category}", 
+                font=("Arial", 10, "bold")).pack(pady=10)
+        
+        # Entry
+        entry_var = tk.StringVar(value=old_category)
+        entry = tk.Entry(dialog, textvariable=entry_var, font=("Arial", 10), width=30)
+        entry.pack(pady=5)
+        entry.focus()
+        entry.select_range(0, tk.END)
+    
+        def save_changes():
+            new_category = entry_var.get().strip()
+            
+            if not new_category:
+                messagebox.showwarning("Attenzione", "Inserisci un nome categoria valido.")
+                return
+            
+            if new_category == old_category:
+                dialog.destroy()
+                return
+            
+            # Controlla duplicati
+            if new_category in self.all_categories:
+                messagebox.showwarning("Attenzione", 
+                                    f"La categoria '{new_category}' esiste già.")
+                return
+            
+            try:
+                from database.category_db import CategoryDatabase
+                from config import DB_FILE
+                
+                category_db = CategoryDatabase(DB_FILE)
+                
+                # Elimina vecchia e aggiungi nuova
+                category_db.delete_category(old_category)
+                category_db.add_category(new_category)
+                
+                messagebox.showinfo("Successo", 
+                                f"Categoria modificata da '{old_category}' a '{new_category}'!")
+                dialog.destroy()
+                self.load_categories()
+            except Exception as e:
+                messagebox.showerror("Errore", f"Errore: {str(e)}")
+        
+        # Buttons
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=20)
+        
+        tk.Button(btn_frame, text="Salva", command=save_changes,
+                bg="#2196F3", fg="white", font=("Arial", 9, "bold"),
+                relief="flat", cursor="hand2", padx=15, pady=5).pack(side="left", padx=5)
+        
+        tk.Button(btn_frame, text="Annulla", command=dialog.destroy,
+                bg="#9E9E9E", fg="white", font=("Arial", 9, "bold"),
+                relief="flat", cursor="hand2", padx=15, pady=5).pack(side="left", padx=5)
+        
+        # Bind Enter key
+        entry.bind('<Return>', lambda e: save_changes())
+
+    def delete_categories(self):
+        """Elimina categorie selezionate"""
+        selection = self.categories_listbox.curselection()
+        
+        if not selection:
+            messagebox.showwarning("Attenzione", "Seleziona almeno una categoria da eliminare.")
+            return
+        
+        # Ottieni categorie selezionate
+        categories_to_delete = []
+        for idx in selection:
+            text = self.categories_listbox.get(idx)
+            category = text.replace("💾 ", "").strip()
+            categories_to_delete.append(category)
+        
+        # Conferma eliminazione
+        if len(categories_to_delete) == 1:
+            message = f"Sei sicuro di voler eliminare la categoria:\n'{categories_to_delete[0]}'?"
+        else:
+            cat_list = '\n'.join([f"  • {cat}" for cat in categories_to_delete])
+            message = f"Sei sicuro di voler eliminare {len(categories_to_delete)} categorie?\n\n{cat_list}"
+        
+        message += "\n\n⚠️ Questa operazione non può essere annullata!"
+        
+        if not messagebox.askyesno("Conferma Eliminazione", message, icon='warning'):
+            return
+        
+        # Elimina categorie
+        try:
+            from database.category_db import CategoryDatabase
+            from config import DB_FILE
+            
+            category_db = CategoryDatabase(DB_FILE)
+            deleted_count = 0
+            
+            for category in categories_to_delete:
+                if category_db.delete_category(category):
+                    deleted_count += 1
+            
+            if deleted_count > 0:
+                messagebox.showinfo("Successo", 
+                                f"Eliminate {deleted_count} categorie con successo!")
+                self.load_categories()
+            else:
+                messagebox.showwarning("Attenzione", "Nessuna categoria è stata eliminata.")
+                
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore durante l'eliminazione:\n{str(e)}")
         
     def create_advanced_tab(self):
         """Tab avanzate"""
@@ -847,204 +1082,3 @@ Workflow supportati:
         """Cancel and close"""
         self.result = False
         self.dialog.destroy()
-        
-    def refresh_categories(self):
-        """Refresh categories list with enhanced information"""
-        # 🛡️ PROTEZIONE ANTI-LOOP
-        if hasattr(self, '_refreshing') and self._refreshing:
-            print("[DEBUG] ⚠️ Refresh already in progress, skipping...")
-            return
-        
-        try:
-            self._refreshing = True  # Set flag
-            print("[DEBUG] 🔄 Starting refresh_categories...")
-            
-            # Clear existing items
-            for item in self.categories_tree.get_children():
-                self.categories_tree.delete(item)
-            
-            # Initialize category database if not exists
-            if not hasattr(self, 'category_db'):
-                from config import DB_FILE
-                from database.category_db import CategoryDatabase
-                self.category_db = CategoryDatabase(DB_FILE)
-                print("[DEBUG] CategoryDatabase initialized in settings")
-            
-            # Get categories with detailed info
-            all_categories = self.category_db.get_all_categories()
-            stats = self.category_db.get_category_stats()
-            
-            print(f"[DEBUG] Found {len(all_categories)} categories: {all_categories}")
-            print(f"[DEBUG] Stats: {stats}")
-            
-            for category_name in all_categories:
-                info = self.category_db.get_category_info(category_name)
-                if info:
-                    print(f"[DEBUG] Processing category: {category_name} - {info}")
-                    
-                    # Determine display values
-                    source_display = "🔒 JSON" if info['source'] == 'json' else "👤 Manual"
-                    status_display = "Protetto" if info['is_protected'] else "Eliminabile"
-                    
-                    # Add to tree
-                    item_id = self.categories_tree.insert("", "end", values=(
-                        f"{'🔒' if info['source'] == 'json' else '👤'} {category_name}",
-                        source_display,
-                        info['usage_count'],
-                        status_display
-                    ))
-            
-            # Update stats display
-            self.stats_label.config(text=f"Totale: {stats['total_categories']} | JSON: {stats['json_categories']} | Manuali: {stats['manual_categories']}")
-            print(f"[DEBUG] ✅ TreeView updated with {len(all_categories)} items")
-            
-        except Exception as e:
-            print(f"Error refreshing categories: {e}")
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Errore", f"Errore nel caricamento categorie: {e}")
-        finally:
-            self._refreshing = False  # ✅ Always reset flag
-            print("[DEBUG] ✅ Refresh completed")
-    
-    def add_category(self):
-        """Add new manual category"""
-        try:
-            category_name = simpledialog.askstring(
-                "Nuova Categoria",
-                "Inserisci il nome della nuova categoria:",
-                parent=self.dialog
-            )
-            
-            if category_name and category_name.strip():
-                category_name = category_name.strip()
-                
-                if self.category_db.category_exists(category_name):
-                    messagebox.showwarning("Attenzione", f"La categoria '{category_name}' esiste già!")
-                    return
-                
-                if self.category_db.add_category(category_name, source='manual'):
-                    messagebox.showinfo("Successo", f"Categoria '{category_name}' aggiunta con successo!")
-                    self.refresh_categories()
-                else:
-                    messagebox.showerror("Errore", "Errore nell'aggiunta della categoria!")
-        except Exception as e:
-            print(f"Error adding category: {e}")
-            messagebox.showerror("Errore", f"Errore nell'aggiunta categoria: {e}")
-    
-    def edit_category(self):
-        """Edit selected category (only manual categories)"""
-        try:
-            selected_item = self.categories_tree.selection()
-            if not selected_item:
-                messagebox.showwarning("Attenzione", "Seleziona una categoria da modificare!")
-                return
-            
-            # Get selected category name (remove emoji)
-            current_name = self.categories_tree.item(selected_item[0])['values'][0]
-            if current_name.startswith('🔒'):
-                current_name = current_name[2:].strip()  # Remove JSON emoji
-            elif current_name.startswith('👤'):
-                current_name = current_name[2:].strip()  # Remove manual emoji
-            
-            # Check if category can be edited
-            info = self.category_db.get_category_info(current_name)
-            if not info or info['is_protected']:
-                messagebox.showwarning("Attenzione", 
-                    "Non puoi modificare categorie protette o derivate da JSON!")
-                return
-            
-            new_name = simpledialog.askstring(
-                "Modifica Categoria",
-                f"Modifica il nome della categoria:",
-                initialvalue=current_name,
-                parent=self.dialog
-            )
-            
-            if new_name and new_name.strip() and new_name.strip() != current_name:
-                new_name = new_name.strip()
-                
-                if self.category_db.category_exists(new_name):
-                    messagebox.showwarning("Attenzione", f"La categoria '{new_name}' esiste già!")
-                    return
-                
-                # Add new and delete old (manual transaction)
-                if (self.category_db.add_category(new_name, source='manual') and 
-                    self.category_db.delete_category(current_name)):
-                    messagebox.showinfo("Successo", f"Categoria rinominata in '{new_name}'!")
-                    self.refresh_categories()
-                else:
-                    messagebox.showerror("Errore", "Errore nella modifica della categoria!")
-                    
-        except Exception as e:
-            print(f"Error editing category: {e}")
-            messagebox.showerror("Errore", f"Errore nella modifica categoria: {e}")
-    
-    def delete_category(self):
-        """Delete selected category (only if allowed)"""
-        try:
-            selected_item = self.categories_tree.selection()
-            if not selected_item:
-                messagebox.showwarning("Attenzione", "Seleziona una categoria da eliminare!")
-                return
-            
-            # Get selected category name (remove emoji)
-            category_name = self.categories_tree.item(selected_item[0])['values'][0]
-            if category_name.startswith('🔒'):
-                category_name = category_name[2:].strip()  # Remove JSON emoji
-            elif category_name.startswith('👤'):
-                category_name = category_name[2:].strip()  # Remove manual emoji
-            
-            # Check if can delete
-            if not self.category_db.can_delete_category(category_name):
-                info = self.category_db.get_category_info(category_name)
-                if info and info['is_protected']:
-                    messagebox.showwarning("Attenzione", 
-                        f"Non puoi eliminare '{category_name}': è una categoria protetta dal JSON corrente!")
-                else:
-                    messagebox.showwarning("Attenzione", 
-                        f"Non puoi eliminare '{category_name}': categoria in uso o protetta!")
-                return
-            
-            # Confirm deletion
-            if messagebox.askyesno("Conferma Eliminazione", 
-                                 f"Sei sicuro di voler eliminare la categoria '{category_name}'?",
-                                 parent=self.dialog):
-                if self.category_db.delete_category(category_name):
-                    messagebox.showinfo("Successo", f"Categoria '{category_name}' eliminata con successo!")
-                    self.refresh_categories()
-                else:
-                    messagebox.showerror("Errore", "Errore nell'eliminazione della categoria!")
-                    
-        except Exception as e:
-            print(f"Error deleting category: {e}")
-            messagebox.showerror("Errore", f"Errore nell'eliminazione categoria: {e}")
-    
-    def cleanup_categories(self):
-        """Clean up unused manual categories"""
-        print("[DEBUG] 🧹 Cleanup button pressed!")
-        try:
-            # Test con 0 giorni (elimina tutte le categorie manuali non utilizzate)
-            if messagebox.askyesno("Pulizia Categorie", 
-                                "Eliminare TUTTE le categorie manuali inutilizzate? (Test)",
-                                parent=self.dialog):
-                print("[DEBUG] User confirmed cleanup")
-                deleted_count = self.category_db.cleanup_unused_categories(keep_days=0)
-                print(f"[DEBUG] cleanup_unused_categories returned: {deleted_count}")
-                
-                if deleted_count > 0:
-                    messagebox.showinfo("Pulizia Completata", 
-                                    f"Eliminate {deleted_count} categorie inutilizzate!")
-                else:
-                    messagebox.showinfo("Pulizia Completata", "Nessuna categoria da eliminare!")
-                
-                print("[DEBUG] About to refresh categories...")
-                self.refresh_categories()
-                print("[DEBUG] Refresh completed")
-                
-        except Exception as e:
-            print(f"[DEBUG] Error in cleanup_categories: {e}")
-            import traceback
-            traceback.print_exc()
-            messagebox.showerror("Errore", f"Errore nella pulizia categorie: {e}")
-    

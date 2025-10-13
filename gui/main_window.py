@@ -6,6 +6,7 @@ import os
 import json
 import csv
 import tkinter as tk
+import sqlite3
 from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from PIL import Image, ImageTk
@@ -32,6 +33,8 @@ class AIDOXAApp(tk.Tk):
         # Initialize core components
         self.config_manager = ConfigManager()
         self.category_db = CategoryDatabase(DB_FILE)
+        # 🆕 Initialize category database for dynamic management
+        self.initialize_category_database_if_needed()
         self.export_manager = ExportManager(self.config_manager.config_data)
         
         # Initialize application
@@ -43,6 +46,28 @@ class AIDOXAApp(tk.Tk):
         # Restore window layout
         self.after(200, self.restore_window_layout)
 
+        def initialize_category_database_if_needed(self):
+            """Initialize category database for dynamic management if not already done"""
+            try:
+                if not hasattr(self, 'category_db') or not self.category_db:
+                    from config import DB_FILE
+                    from database import CategoryDatabase
+                    self.category_db = CategoryDatabase(DB_FILE)
+                    print("[DEBUG] Category database initialized")
+            except Exception as e:
+                print(f"Error initializing category database: {e}")
+
+    def initialize_category_database_if_needed(self):
+        """Initialize category database for dynamic management if not already done"""
+        try:
+            if not hasattr(self, 'category_db') or not self.category_db:
+                from config import DB_FILE
+                from database import CategoryDatabase
+                self.category_db = CategoryDatabase(DB_FILE)
+                print("[DEBUG] Category database initialized")
+        except Exception as e:
+            print(f"Error initializing category database: {e}")
+        
     def init_variables(self):
         """Initialize all instance variables"""
         # Document management
@@ -155,7 +180,15 @@ class AIDOXAApp(tk.Tk):
         help_menu.add_command(label="Mostra Info Documento", command=self.show_document_info_dialog)  # NUOVO
         help_menu.add_separator()
         help_menu.add_command(label="Informazioni", command=lambda: show_about_dialog(self))
-        
+
+        # 🆕 Categories menu
+        categories_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Categorie", menu=categories_menu)
+        categories_menu.add_command(label="Statistiche Categorie", command=self.get_category_statistics)
+        categories_menu.add_command(label="Pulizia Categorie", command=self.cleanup_old_categories)
+        categories_menu.add_separator()
+        categories_menu.add_command(label="🔧 Fix Database Schema", command=self.fix_database_schema)
+                
     def show_document_info_dialog(self):
         """Show document information in a dialog"""
         if not self.documentgroups:
@@ -814,16 +847,17 @@ class AIDOXAApp(tk.Tk):
             self.after(100, self.save_config)
 
     def on_category_changed(self, event=None):
-        """Handle category selection change"""
+        """Handle category selection change with enhanced tracking"""
         new_category = self.category_var.get()
-        
         if self.selected_group:
             if new_category != self.selected_group.categoryname:
                 old_category = self.selected_group.categoryname
                 self.selected_group.update_categoryname(new_category)
                 self.page_info_label.config(text=f"Documento: {new_category} ({len(self.selected_group.pages)} pagine)")
                 
-                self.category_db.add_category(new_category)
+                # 🆕 Track category usage with proper source
+                self.category_db.add_category(new_category, source='manual')
+                print(f"[DEBUG] Category usage tracked: {new_category}")
                 
                 if self.selected_thumbnail:
                     self.selection_info.config(text=f"Selezionata: Pagina {self.selected_thumbnail.pagenum}")
@@ -996,11 +1030,31 @@ class AIDOXAApp(tk.Tk):
             messagebox.showwarning("Attenzione", "Inserisci una categoria valida o nuova")
 
     def update_category_combo(self):
-        """Update category combo with all available categories"""
-        json_categories = list(self.all_categories)
-        db_categories = self.category_db.get_all_categories()
-        all_cats = sorted(set(json_categories + db_categories))
-        self.category_combo['values'] = all_cats
+        """Update category combobox with current categories (JSON first, then manual)"""
+        try:
+            # Get all categories from database (JSON first, then manual)
+            all_categories = self.category_db.get_all_categories()
+            
+            # Update combobox values
+            if hasattr(self, 'category_combo') and self.category_combo:
+                current_value = self.category_combo.get()
+                self.category_combo['values'] = all_categories
+                
+                # Restore previous value if still valid
+                if current_value in all_categories:
+                    self.category_combo.set(current_value)
+                elif all_categories:
+                    self.category_combo.set(all_categories[0])  # Set to first (likely JSON category)
+                
+                print(f"[DEBUG] Updated category combobox with {len(all_categories)} categories")
+            
+        except Exception as e:
+            print(f"Error updating category combobox: {e}")
+    
+    # Alias per compatibilità
+    def update_category_combobox(self):
+        """Alias for update_category_combo for compatibility"""
+        return self.update_category_combo()
 
     def load_metadata_from_json(self, data):
         """Load metadata from JSON header - completely dynamic"""
@@ -1134,6 +1188,31 @@ class AIDOXAApp(tk.Tk):
         
             # Carica metadati (dinamici)
             self.load_metadata_from_json(data)
+            
+            # 🆕 Store categories data per sincronizzazione
+            if 'categories' in data:
+                self.categories_data = data['categories']
+                print(f"[DEBUG] Stored {len(self.categories_data)} categories for sync")
+            
+            # 🆕 SINCRONIZZAZIONE DINAMICA CATEGORIE
+            # Check if JSON has categories and split is enabled
+            if hasattr(self, 'categories_data') and self.categories_data:
+                # Estrai categorie uniche dal JSON (escludendo "Pagina vuota")
+                all_json_categories = [cat.get('categoria', '') for cat in self.categories_data if cat.get('categoria')]
+                
+                # ❌ ESCLUDI "Pagina vuota" perché viene accorpata durante l'importazione
+                excluded_categories = ['Pagina vuota', 'pagina vuota', 'PAGINA VUOTA']
+                json_categories = list(set(cat for cat in all_json_categories if cat not in excluded_categories))
+                
+                if json_categories:
+                    # Sincronizza con database - le categorie JSON diventeranno protette
+                    self.category_db.sync_json_categories(json_categories, json_file)
+                    print(f"[DEBUG] ✅ Synced {len(json_categories)} categories from JSON: {json_categories}")
+                    print(f"[DEBUG] ⚠️ Excluded categories: {[cat for cat in all_json_categories if cat in excluded_categories]}")
+                    
+                    # Aggiorna UI categorie
+                    self.update_category_combobox()
+                    print(f"[DEBUG] ✅ Categories synchronized automatically!")
         
             # Determina modalità
             has_categories = 'categories' in data and isinstance(data['categories'], list)
@@ -2758,3 +2837,122 @@ Per utilizzare: Menu Batch → Esegui Batch (Ctrl+B)"""
             group.pack(pady=5, fill="x", padx=5)
         
         self.after_idle(self.update_scroll_region)
+        
+    def get_category_statistics(self):
+        """Get comprehensive category statistics for debugging/admin"""
+        try:
+            stats = self.category_db.get_category_stats()
+            
+            print("\n" + "="*50)
+            print("CATEGORY STATISTICS")
+            print("="*50)
+            print(f"Total categories: {stats['total_categories']}")
+            print(f"JSON categories: {stats['json_categories']}")
+            print(f"Manual categories: {stats['manual_categories']}")
+            print(f"Protected categories: {stats['protected_categories']}")
+            print(f"Current JSON categories: {stats['current_json_categories']}")
+            print(f"Most used: {stats['most_used_category']} ({stats['most_used_count']} uses)")
+            print("="*50 + "\n")
+            
+            # Show in dialog too
+            stats_text = f"""STATISTICHE CATEGORIE:
+
+Categorie totali: {stats['total_categories']}
+Categorie JSON: {stats['json_categories']}
+Categorie manuali: {stats['manual_categories']}
+Categorie protette: {stats['protected_categories']}
+Categorie JSON correnti: {stats['current_json_categories']}
+
+Più utilizzata: {stats['most_used_category']} ({stats['most_used_count']} volte)"""
+            
+            messagebox.showinfo("Statistiche Categorie", stats_text)
+            return stats
+            
+        except Exception as e:
+            print(f"Error getting category statistics: {e}")
+            messagebox.showerror("Errore", f"Errore nel recupero statistiche: {e}")
+            return {}
+    
+    def cleanup_old_categories(self):
+        """Menu action to cleanup old unused categories"""
+        try:
+            if messagebox.askyesno("Pulizia Categorie", 
+                                 "Eliminare le categorie manuali inutilizzate degli ultimi 30 giorni?"):
+                deleted_count = self.category_db.cleanup_unused_categories(keep_days=30)
+                if deleted_count > 0:
+                    messagebox.showinfo("Pulizia Completata", 
+                                      f"Eliminate {deleted_count} categorie inutilizzate!")
+                    self.update_category_combo()
+                else:
+                    messagebox.showinfo("Pulizia Completata", "Nessuna categoria da eliminare!")
+                    
+        except Exception as e:
+            print(f"Error cleaning up categories: {e}")
+            messagebox.showerror("Errore", f"Errore nella pulizia categorie: {e}")
+            
+    def fix_database_schema(self):
+        """Fix database schema for dynamic categories (run once)"""
+        try:
+            print("🔧 Fixing database schema...")
+            import sqlite3
+            
+            with sqlite3.connect(DB_FILE) as conn:
+                cursor = conn.cursor()
+                
+                # Check existing table structure
+                cursor.execute("PRAGMA table_info(categories)")
+                columns = [row[1] for row in cursor.fetchall()]
+                print(f"[DEBUG] Existing columns: {columns}")
+                
+                # Check for categories with NULL values in new fields
+                cursor.execute("""
+                    SELECT COUNT(*) FROM categories 
+                    WHERE source IS NULL OR source = '' 
+                    OR usage_count IS NULL OR usage_count = 0
+                    OR is_protected IS NULL
+                """)
+                null_count = cursor.fetchone()[0]
+                
+                if null_count > 0:
+                    print(f"[DEBUG] Found {null_count} categories with missing data, updating...")
+                    
+                    # Update existing categories to have proper defaults
+                    cursor.execute("UPDATE categories SET source = 'manual' WHERE source IS NULL OR source = ''")
+                    cursor.execute("UPDATE categories SET usage_count = 1 WHERE usage_count IS NULL OR usage_count = 0")
+                    cursor.execute("UPDATE categories SET is_protected = 0 WHERE is_protected IS NULL")
+                    
+                    conn.commit()
+                    print("✅ Updated existing categories with default values!")
+                    
+                    # Show current categories
+                    cursor.execute("SELECT name, source, usage_count, is_protected FROM categories ORDER BY name")
+                    categories = cursor.fetchall()
+                    
+                    print(f"\n📊 Updated {len(categories)} categories:")
+                    for cat in categories:
+                        print(f"   - {cat[0]} (source: {cat[1]}, usage: {cat[2]}, protected: {cat[3]})")
+                    
+                    messagebox.showinfo("Database Update", 
+                        f"✅ Updated {len(categories)} existing categories!\n\n"
+                        f"All categories now have proper source, usage_count, and protection status.\n"
+                        f"Categories are ready for the dynamic system.")
+                else:
+                    # Show current categories anyway
+                    cursor.execute("SELECT name, source, usage_count, is_protected FROM categories ORDER BY name")
+                    categories = cursor.fetchall()
+                    
+                    print(f"\n📊 Current {len(categories)} categories:")
+                    for cat in categories:
+                        print(f"   - {cat[0]} (source: {cat[1]}, usage: {cat[2]}, protected: {cat[3]})")
+                    
+                    if len(categories) > 0:
+                        messagebox.showinfo("Database Check", 
+                            f"✅ Database has {len(categories)} categories, all properly configured!\n\n"
+                            f"Schema and data are up to date.")
+                    else:
+                        messagebox.showinfo("Database Check", 
+                            "✅ Database schema is up to date!\n\nNo categories found in database.")
+                    
+        except Exception as e:
+            print(f"❌ Error fixing database: {e}")
+            messagebox.showerror("Database Error", f"Error updating database:\n{e}")
