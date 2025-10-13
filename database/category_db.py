@@ -102,3 +102,24 @@ class CategoryDatabase:
         except Exception as e:
             print(f"Error getting stats: {e}")
             return {'total_categories': 0, 'most_recent': None, 'most_recent_date': None}
+
+    def delete_category(self, category: str) -> bool:
+        """
+        Delete a category from database
+        
+        Args:
+            category: Category name to delete
+        
+        Returns:
+            True if deleted successfully, False otherwise
+        """
+        try:
+            self.cursor.execute(
+                "DELETE FROM categories WHERE name = ?",
+                (category,)
+            )
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error deleting category: {e}")
+            return False
