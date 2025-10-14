@@ -712,7 +712,7 @@ Workflow supportati:
         
     def create_buttons(self):
         """Create bottom buttons"""
-        button_frame = tk.Frame(self.dialog, height=50, bg="lightblue")  # Altezza fissa + debug
+        button_frame = tk.Frame(self.dialog, height=50)
         button_frame.pack(fill="x", side="bottom", pady=10)
         button_frame.pack_propagate(False)  # ← CHIAVE: impedisce il collasso
         
@@ -779,71 +779,72 @@ Workflow supportati:
             
     def on_ok(self):
         """Save settings and close"""
-        # Paths
-        self.config_manager.config_data['default_input_folder'] = \
-            self.default_input_folder_var.get()
-        self.config_manager.config_data['default_output_folder'] = \
-            self.default_output_folder_var.get()
-        self.config_manager.config_data['json_folder'] = \
-            self.json_folder_var.get()
-        self.config_manager.config_data['use_same_folder_for_json'] = \
-            self.use_input_json_var.get()
-        self.config_manager.config_data['preserve_folder_structure'] = \
-            self.preserve_structure_var.get()
-        
-        # Fonts
-        self.config_manager.config_data['fonts']['document_font_name'] = \
-            self.font_name_var.get()
-        self.config_manager.config_data['fonts']['document_font_size'] = \
-            self.font_size_var.get()
-        self.config_manager.config_data['fonts']['document_font_bold'] = \
-            self.font_bold_var.get()
-        
-        # Thumbnails
-        self.config_manager.config_data['thumbnail_width'] = \
-            self.thumb_width_var.get()
-        self.config_manager.config_data['thumbnail_height'] = \
-            self.thumb_height_var.get()
-        self.config_manager.config_data['thumbnail_keep_aspect_ratio'] = \
-            self.keep_aspect_var.get()
-            
-        # Export
-        self.config_manager.config_data['export_format'] = \
-            self.export_format_var.get()
-        self.config_manager.config_data['jpeg_quality'] = \
-            self.jpeg_quality_var.get()
-        self.config_manager.config_data['file_handling_mode'] = \
-            self.file_handling_var.get()
-        
-        # CSV
-        self.config_manager.config_data['csv_mode'] = self.csv_mode_var.get()
-        self.config_manager.config_data['csv_delimiter'] = self.csv_delimiter_var.get()
-        self.config_manager.config_data['csv_output_path'] = self.csv_output_var.get()
-        self.config_manager.config_data['csv_use_document_name'] = self.csv_use_doc_name_var.get()
-        self.config_manager.config_data['csv_custom_name'] = self.csv_custom_name_var.get().strip()
-        
-        # Batch CSV (NUOVO)
-        self.config_manager.config_data['batch_csv_location'] = self.csv_location_var.get()
-        self.config_manager.config_data['batch_csv_naming'] = self.csv_naming_var.get()
-        self.config_manager.config_data['batch_csv_custom_prefix'] = self.csv_prefix_var.get().strip()
-        self.config_manager.config_data['batch_csv_add_timestamp'] = self.csv_timestamp_var.get()
-        self.config_manager.config_data['batch_csv_add_counter'] = self.csv_counter_var.get()
-        
-        # Batch
-        self.config_manager.config_data['batch_mode_enabled'] = self.batch_enabled_var.get()
-        
-        # Advanced
-        self.config_manager.config_data['auto_save_changes'] = self.auto_save_var.get()
-        self.config_manager.config_data['save_window_layout'] = self.save_layout_var.get()
-        self.config_manager.config_data['auto_fit_images'] = self.auto_fit_var.get()
-        self.config_manager.config_data['show_debug_info'] = self.debug_var.get()
-        
-        # Save
-        self.config_manager.save_config()
-        
-        self.result = True
-        self.dialog.destroy()
-        
+        try:
+            # Paths
+            self.config_manager.config_data["default_input_folder"] = self.default_input_folder_var.get()
+            self.config_manager.config_data["default_output_folder"] = self.default_output_folder_var.get()
+            self.config_manager.config_data["json_folder"] = self.json_folder_var.get()
+            self.config_manager.config_data["use_same_folder_for_json"] = self.use_input_json_var.get()
+            self.config_manager.config_data["preserve_folder_structure"] = self.preserve_structure_var.get()
+
+            # Fonts
+            self.config_manager.config_data["fonts"]["document_font_name"] = self.font_name_var.get()
+            self.config_manager.config_data["fonts"]["document_font_size"] = self.font_size_var.get()
+            self.config_manager.config_data["fonts"]["document_font_bold"] = self.font_bold_var.get()
+
+            # Thumbnails
+            self.config_manager.config_data["thumbnail_width"] = self.thumb_width_var.get()
+            self.config_manager.config_data["thumbnail_height"] = self.thumb_height_var.get()
+            self.config_manager.config_data["thumbnail_keep_aspect_ratio"] = self.keep_aspect_var.get()
+
+            # Export - SOLO se esistono le variabili
+            if hasattr(self, 'export_format_var'):
+                self.config_manager.config_data["export_format"] = self.export_format_var.get()
+            if hasattr(self, 'jpeg_quality_var'):
+                self.config_manager.config_data["jpeg_quality"] = self.jpeg_quality_var.get()
+            if hasattr(self, 'file_handling_var'):
+                self.config_manager.config_data["file_handling_mode"] = self.file_handling_var.get()
+
+            # CSV
+            if hasattr(self, 'csv_naming_var'):
+                self.config_manager.config_data["csv_naming"] = self.csv_naming_var.get()
+            if hasattr(self, 'csv_prefix_var'):
+                self.config_manager.config_data["csv_prefix"] = self.csv_prefix_var.get()
+            if hasattr(self, 'csv_timestamp_var'):
+                self.config_manager.config_data["csv_add_timestamp"] = self.csv_timestamp_var.get()
+            if hasattr(self, 'csv_counter_var'):
+                self.config_manager.config_data["csv_add_counter"] = self.csv_counter_var.get()
+
+            # Batch
+            if hasattr(self, 'batch_enabled_var'):
+                self.config_manager.config_data["batch_mode_enabled"] = self.batch_enabled_var.get()
+
+            # Advanced
+            if hasattr(self, 'split_by_category_var'):
+                self.config_manager.config_data["split_documents_by_category"] = self.split_by_category_var.get()
+            if hasattr(self, 'auto_save_var'):
+                self.config_manager.config_data["auto_save_changes"] = self.auto_save_var.get()
+            if hasattr(self, 'save_layout_var'):
+                self.config_manager.config_data["save_window_layout"] = self.save_layout_var.get()
+            if hasattr(self, 'debug_var'):
+                self.config_manager.config_data["show_debug_info"] = self.debug_var.get()
+
+            # Save
+            self.config_manager.save_config()
+            self.result = True
+
+            # Sincronizza il combobox categorie della finestra principale
+            if hasattr(self.parent, 'update_category_combobox'):
+                self.parent.update_category_combobox()
+
+            self.dialog.destroy()
+
+        except Exception as e:
+            print(f"[ERROR] Error in on_ok(): {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Errore", f"Errore nel salvare le impostazioni: {e}")
+
     def on_cancel(self):
         """Cancel and close"""
         self.result = False
