@@ -666,6 +666,15 @@ Workflow supportati:
         """Tab avanzate"""
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="Avanzate")
+                   
+        # ---- NUOVE VARIABILI: Numerazione Documenti ----
+        self.doc_prefix_var = tk.StringVar(value=self.config_manager.config_data.get('document_numbering', {}).get('prefix', ''))
+        self.doc_suffix_var = tk.StringVar(value=self.config_manager.config_data.get('document_numbering', {}).get('suffix', ''))
+        self.doc_counter_digits_var = tk.IntVar(value=self.config_manager.config_data.get('document_numbering', {}).get('counter_digits', 4))
+        self.doc_start_number_var = tk.IntVar(value=self.config_manager.config_data.get('document_numbering', {}).get('start_number', 1))
+        self.doc_use_base_name_var = tk.BooleanVar(value=self.config_manager.config_data.get('document_numbering', {}).get('use_base_name', True))
+        self.doc_numbering_mode_var = tk.StringVar(value=self.config_manager.config_data.get('document_numbering', {}).get('numbering_mode', 'per_category'))
+        self.doc_preview_var = tk.StringVar(value='0001, 0002, 0003, ...')
         
         # NUOVO: Split documents by category
         tk.Label(frame, text="Gestione Documenti:",
@@ -683,8 +692,65 @@ Workflow supportati:
         ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=10, padx=10)
         
         # Existing checkboxes remain below
-        tk.Label(frame, text="Preferenze Generali:",
-                font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        tk.Label(frame, text="Numerazione Documenti", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        
+        # Row 1: Prefisso e Suffisso
+        row1_frame = tk.Frame(frame)
+        row1_frame.pack(fill="x", padx=20, pady=5)
+        tk.Label(row1_frame, text="Prefisso:").pack(side="left")
+        prefix_entry = tk.Entry(row1_frame, textvariable=self.doc_prefix_var, width=15)
+        prefix_entry.pack(side="left", padx=(5, 20))
+        prefix_entry.bind("<KeyRelease>", self._update_numbering_preview)
+        
+        tk.Label(row1_frame, text="Suffisso:").pack(side="left")
+        suffix_entry = tk.Entry(row1_frame, textvariable=self.doc_suffix_var, width=15)
+        suffix_entry.pack(side="left", padx=(5, 0))
+        suffix_entry.bind("<KeyRelease>", self._update_numbering_preview)
+        
+        # Row 2: Cifre contatore e numero iniziale
+        row2_frame = tk.Frame(frame)
+        row2_frame.pack(fill="x", padx=20, pady=5)
+        tk.Label(row2_frame, text="Cifre contatore:").pack(side="left")
+        digits_combo = ttk.Combobox(row2_frame, textvariable=self.doc_counter_digits_var, width=8, state="readonly")
+        digits_combo["values"] = [2, 3, 4, 5]
+        digits_combo.pack(side="left", padx=(5, 20))
+        digits_combo.bind("<<ComboboxSelected>>", self._update_numbering_preview)
+        
+        tk.Label(row2_frame, text="Numero iniziale:").pack(side="left")
+        start_spinbox = tk.Spinbox(row2_frame, from_=1, to=99999, textvariable=self.doc_start_number_var, width=8)
+        start_spinbox.pack(side="left", padx=(5, 0))
+        start_spinbox.bind("<KeyRelease>", self._update_numbering_preview)
+        
+        # Row 3: Opzioni
+        options_frame = tk.Frame(frame)
+        options_frame.pack(fill="x", padx=20, pady=5)
+        ttk.Checkbutton(
+            options_frame,
+            text="Usa nome file base in modalità multi-documento",
+            variable=self.doc_use_base_name_var,
+            command=self._update_numbering_preview
+        ).pack(anchor="w")
+        
+        # Row 4: Modalità numerazione
+        numbering_frame = tk.Frame(frame)
+        numbering_frame.pack(fill="x", padx=20, pady=5)
+        tk.Label(numbering_frame, text="Modalità numerazione:").pack(side="left")
+        numbering_combo = ttk.Combobox(numbering_frame, textvariable=self.doc_numbering_mode_var, width=15, state="readonly")
+        numbering_combo["values"] = ["per_category", "global"]
+        numbering_combo.pack(side="left", padx=(5, 0))
+        numbering_combo.bind("<<ComboboxSelected>>", self._update_numbering_preview)
+        
+        # Preview
+        preview_frame = tk.LabelFrame(frame, text="Anteprima", font=("Arial", 9))
+        preview_frame.pack(fill="x", padx=20, pady=(5, 10))
+        self.preview_label = tk.Label(preview_frame, textvariable=self.doc_preview_var, font=("Courier", 11, "bold"), fg="blue")
+        self.preview_label.pack(anchor="w", padx=10, pady=5)
+        tk.Label(preview_frame, text="Esempi: Doc_0001, 001_v1, Pratica_00001_FINAL", font=("Arial", 8), fg="gray").pack(anchor="w", padx=10, pady=(0, 5))
+        
+        # Separator per Preferenze Generali
+        ttk.Separator(frame, orient="horizontal").pack(fill="x", pady=10, padx=10)
+        
+        tk.Label(frame, text="Preferenze Generali", font=("Arial", 10, "bold")).pack(anchor="w", padx=10, pady=(10, 5))
     
         # Auto-save
         self.auto_save_var = tk.BooleanVar(
@@ -709,6 +775,9 @@ Workflow supportati:
             value=self.config_manager.config_data.get('show_debug_info', False))
         ttk.Checkbutton(frame, text="Mostra informazioni debug",
                        variable=self.debug_var).pack(anchor="w", padx=20, pady=5)
+        
+        # Aggiorna preview iniziale
+        self._update_numbering_preview()
         
     def create_buttons(self):
         """Create bottom buttons"""
@@ -826,8 +895,21 @@ Workflow supportati:
                 self.config_manager.config_data["auto_save_changes"] = self.auto_save_var.get()
             if hasattr(self, 'save_layout_var'):
                 self.config_manager.config_data["save_window_layout"] = self.save_layout_var.get()
+            
+            # Debug info
             if hasattr(self, 'debug_var'):
-                self.config_manager.config_data["show_debug_info"] = self.debug_var.get()
+                self.config_manager.config_data['show_debug_info'] = self.debug_var.get()
+            
+            # ---- NUOVA: Numerazione Documenti ----
+            if 'document_numbering' not in self.config_manager.config_data:
+                self.config_manager.config_data['document_numbering'] = {}
+            
+            self.config_manager.config_data['document_numbering']['prefix'] = self.doc_prefix_var.get()
+            self.config_manager.config_data['document_numbering']['suffix'] = self.doc_suffix_var.get()
+            self.config_manager.config_data['document_numbering']['counter_digits'] = self.doc_counter_digits_var.get()
+            self.config_manager.config_data['document_numbering']['start_number'] = self.doc_start_number_var.get()
+            self.config_manager.config_data['document_numbering']['use_base_name'] = self.doc_use_base_name_var.get()
+            self.config_manager.config_data['document_numbering']['numbering_mode'] = self.doc_numbering_mode_var.get()
 
             # Save
             self.config_manager.save_config()
@@ -849,6 +931,47 @@ Workflow supportati:
         """Cancel and close"""
         self.result = False
         self.dialog.destroy()
+
+
+    def _update_numbering_preview(self, event=None):
+        """Aggiorna anteprima numerazione in tempo reale"""
+        try:
+            prefix = self.doc_prefix_var.get()
+            suffix = self.doc_suffix_var.get()
+            digits = self.doc_counter_digits_var.get() or 4
+            start_num = self.doc_start_number_var.get() or 1
+            use_base = self.doc_use_base_name_var.get()
+
+            counter1 = str(start_num).zfill(digits)
+            counter2 = str(start_num + 1).zfill(digits)
+            counter3 = str(start_num + 2).zfill(digits)
+
+            numbering_mode = self.doc_numbering_mode_var.get()
+            
+            if numbering_mode == 'per_category':
+                if use_base:
+                    preview1 = f"{prefix}{counter1}_documento1_Contratti{suffix}"
+                    preview2 = f"{prefix}{counter1}_documento1_Fatture{suffix}"
+                    preview3 = f"{prefix}{counter2}_documento2_Contratti{suffix}"
+                else:
+                    preview1 = f"{prefix}{counter1}_Contratti{suffix}"
+                    preview2 = f"{prefix}{counter1}_Fatture{suffix}"
+                    preview3 = f"{prefix}{counter2}_Contratti{suffix}"
+            else:  # global
+                if use_base:
+                    preview1 = f"{prefix}{counter1}_documento1{suffix}"
+                    preview2 = f"{prefix}{counter2}_documento2{suffix}"
+                    preview3 = f"{prefix}{counter3}_documento3{suffix}"
+                else:
+                    preview1 = f"{prefix}{counter1}{suffix}"
+                    preview2 = f"{prefix}{counter2}{suffix}"
+                    preview3 = f"{prefix}{counter3}{suffix}"
+
+            preview_text = f"{preview1}, {preview2}, {preview3}, ..."
+            self.doc_preview_var.set(preview_text)
+
+        except Exception:
+            self.doc_preview_var.set("Anteprima non disponibile")
         
     def refresh_categories(self):
         """Refresh categories list with enhanced information"""

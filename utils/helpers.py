@@ -210,6 +210,195 @@ def sanitize_filename(filename: str) -> str:
     Returns:
         Sanitized filename
     """
+    if not filename:
+        return "unnamed"
+        
     import re
     # Remove invalid characters for Windows/Unix filenames
-    return re.sub(r'[<>:"/\\|?*]', '_', filename).strip()
+    sanitized = re.sub(r'[<>:"/\\|?*]', '', filename)
+    
+    # Replace multiple spaces with underscore
+    sanitized = re.sub(r'\s+', '_', sanitized.strip())
+    
+    # Remove leading/trailing dots and spaces
+    sanitized = sanitized.strip('. ')
+    
+    return sanitized or "unnamed"
+
+
+def generate_numbered_filename(base_name: str, counter: int, config_manager, is_multi_document=False, category_name=""):
+    """
+    Genera nome file con numerazione personalizzabile
+    
+    Args:
+        base_name: Nome base del documento (senza estensione)
+        counter: Numero progressivo 
+        config_manager: Gestore configurazione
+        is_multi_document: Se True, include nome base nel contatore
+        category_name: Nome categoria (per modalità split)
+    
+    Returns:
+        str: Nome file numerato (senza estensione)
+        
+    Esempio:
+        base_name='contratto', counter=1, prefix='Doc_', suffix='_v1'
+        -> 'Doc_0001_contratto_v1' (se is_multi_document=True)
+        -> 'Doc_0001_v1' (se is_multi_document=False)
+    """
+    # Carica configurazione numerazione
+    numbering_config = config_manager.config_data.get('document_numbering', {})
+    
+    prefix = numbering_config.get('prefix', '')
+    suffix = numbering_config.get('suffix', '') 
+    counter_digits = numbering_config.get('counter_digits', 4)
+    use_base_name = numbering_config.get('use_base_name', True)
+    numbering_mode = numbering_config.get('numbering_mode', 'per_category')
+    
+    # Formatta contatore con zeri iniziali
+    formatted_counter = str(counter).zfill(counter_digits)
+    
+    # Costruisci parti del nome
+    parts = []
+    
+    # Prefisso
+    if prefix:
+        parts.append(prefix.rstrip('_'))  # Remove trailing underscore if present
+    
+    # Contatore
+    parts.append(formatted_counter)
+    
+    # Nome base (se abilitato e modalità multi-documento)
+    if use_base_name and is_multi_document and base_name:
+        safe_base = sanitize_filename(base_name)
+        if safe_base and safe_base != "unnamed":
+            parts.append(safe_base)
+    
+    # Categoria (sempre per modalità per_category, mai per globale)
+    if numbering_mode == 'per_category' and category_name and category_name != "Pagina vuota":
+        safe_category = sanitize_filename(category_name)
+        if safe_category and safe_category != "unnamed":
+            parts.append(safe_category)
+    
+    # Suffisso  
+    if suffix:
+        parts.append(suffix.lstrip('_'))  # Remove leading underscore if present
+    
+    # Unisci con underscore, rimuovi underscore doppi/tripli
+    filename = '_'.join(part for part in parts if part)
+    
+    # Cleanup multiple underscores
+    import re
+    filename = re.sub(r'_+', '_', filename)
+    filename = filename.strip('_')
+    
+    return filename or f"doc_{formatted_counter}"  # Fallback se vuoto
+
+def get_document_counter_manager(config_manager, numbering_mode='per_category'):
+    """
+    Gestisce i contatori per la numerazione documenti
+    
+    Args:
+        config_manager: Gestore configurazione
+        numbering_mode: 'global' o 'per_category'
+        
+    Returns:
+        dict: Dizionario contatori per categoria
+    """
+    start_number = config_manager.config_data.get('document_numbering', {}).get('start_number', 1)
+    
+    if numbering_mode == 'global':
+        # Contatore globale unico
+        return {'_global': start_number}
+    else:
+        # Contatori separati per categoria
+        return {}  # Si inizializza dinamicamente
+
+def generate_numbered_filename(base_name, counter, config_manager, is_multi_document=False, category_name=""):
+    """
+    Genera nome file con numerazione personalizzabile
+    
+    Args:
+        base_name: Nome base del documento
+        counter: Numero progressivo 
+        config_manager: Gestore configurazione
+        is_multi_document: Se True, include nome base nel contatore
+        category_name: Nome categoria (per modalità split)
+    
+    Returns:
+        str: Nome file numerato (senza estensione)
+        
+    Esempio:
+        base_name='contratto', counter=1, prefix='Doc_', suffix='_v1'
+        -> 'Doc_0001_contratto_v1' (se is_multi_document=True)
+        -> 'Doc_0001_v1' (se is_multi_document=False)
+    """
+    # Carica configurazione numerazione
+    numbering_config = config_manager.config_data.get('document_numbering', {})
+    
+    prefix = numbering_config.get('prefix', '')
+    suffix = numbering_config.get('suffix', '') 
+    counter_digits = numbering_config.get('counter_digits', 4)
+    use_base_name = numbering_config.get('use_base_name', True)
+    
+    # Formatta contatore con zeri iniziali
+    formatted_counter = str(counter).zfill(counter_digits)
+    
+    # Costruisci parti del nome
+    parts = []
+    
+    # Prefisso
+    if prefix:
+        parts.append(prefix)
+    
+    # Contatore
+    parts.append(formatted_counter)
+    
+    # Nome base (se abilitato e modalità multi-documento)
+    if use_base_name and is_multi_document and base_name:
+        # Sanitizza nome base
+        safe_base = sanitize_filename(base_name)
+        parts.append(safe_base)
+    
+    # Categoria (per modalità split)
+    if category_name and category_name != "Pagina vuota":
+        safe_category = sanitize_filename(category_name)
+        parts.append(safe_category)
+    
+    # Suffisso  
+    if suffix:
+        parts.append(suffix)
+    
+    # Unisci con underscore, rimuovi underscore doppi/tripli
+    filename = '_'.join(part for part in parts if part)
+    filename = '_'.join(filter(None, filename.split('_')))  # Remove empty parts
+    
+    return filename or f"doc_{formatted_counter}"  # Fallback se vuoto
+
+
+def sanitize_filename(filename):
+    """
+    Sanitizza nome file rimuovendo caratteri non validi
+    
+    Args:
+        filename: Nome file da sanitizzare
+        
+    Returns:
+        str: Nome file sanitizzato
+    """
+    if not filename:
+        return ""
+        
+    # Caratteri non validi Windows/Linux
+    invalid_chars = r'<>:"/\|?*'
+    sanitized = filename
+    
+    for char in invalid_chars:
+        sanitized = sanitized.replace(char, '')
+    
+    # Rimuovi spazi multipli e sostituisci con underscore
+    sanitized = '_'.join(sanitized.split())
+    
+    # Rimuovi punti iniziali/finali e spazi
+    sanitized = sanitized.strip('. ')
+    
+    return sanitized or "unnamed"

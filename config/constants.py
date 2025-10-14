@@ -91,6 +91,16 @@ DEFAULT_CONFIG = {
     'batch_csv_mode': 'per_folder',  # 'per_folder' | 'global'
     'batch_database_path': None,  # Verrà impostato dinamicamente
 
+    # ---- NUOVA: Numerazione Documenti ----
+    'document_numbering': {
+        'prefix': '',  # Prefisso (es: 'Doc_', 'Pratica_')
+        'suffix': '',  # Suffisso (es: '_v1', '_FINAL')
+        'counter_digits': 4,  # 2,3,4,5 cifre (01, 001, 0001, 00001)
+        'start_number': 1,  # Numero iniziale
+        'use_base_name': True,  # Usa nome file base in modalità multi-documento
+        'numbering_mode': 'per_category'  # 'global' o 'per_category'
+    },
+    
     'application_info': {
         'name': 'DynamicAI Editor',
         'version': '3.6',  # Incrementato per batch
