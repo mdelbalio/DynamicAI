@@ -21,31 +21,31 @@ class SettingsDialog:
         self.parent = parent
         self.config_manager = config_manager
         self.result = None
-        
+
         # Create dialog
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Impostazioni DynamicAI")
-        self.dialog.geometry("700x650")
-        self.dialog.minsize(700, 650)
+        self.dialog.geometry("700x720")  # Un po' più alta
+        self.dialog.minsize(700, 720)
         self.dialog.transient(parent)
         self.dialog.grab_set()
-        
-        # ⭐ STEP 1: CREA PRIMA I PULSANTI (in fondo alla finestra)
-        self.notebook = ttk.Notebook(self.dialog)
-        self.notebook.pack(fill="both", expand=True, padx=10, pady=(10, 5))
 
-        # â­ STEP 2: Crea i tab
+        # ⭐ STEP 1: CREA I PULSANTI PRIMA!
+        self.create_buttons()
+        
+        # ⭐ STEP 2: POI il notebook
+        self.notebook = ttk.Notebook(self.dialog)
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=(10, 10))  # Meno spazio in basso
+
+        # STEP 3: Crea i tab
         self.create_paths_tab()
         self.create_fonts_tab()
         self.create_thumbnails_tab()
         self.create_export_tab()
         self.create_csv_tab()
         self.create_batch_tab()
-        self.create_categories_tab()  # âœ… NUOVO TAB
-        self.create_advanced_tab()
-
-        # â­ STEP 3: Crea pulsanti ALLA FINE (in fondo alla finestra)
-        self.create_buttons()
+        self.create_categories_tab()
+        self.create_advanced_tab()       
         
     def create_paths_tab(self):
         """Tab percorsi input/output e JSON"""
@@ -712,8 +712,9 @@ Workflow supportati:
         
     def create_buttons(self):
         """Create bottom buttons"""
-        button_frame = tk.Frame(self.dialog)
+        button_frame = tk.Frame(self.dialog, height=50, bg="lightblue")  # Altezza fissa + debug
         button_frame.pack(fill="x", side="bottom", pady=10)
+        button_frame.pack_propagate(False)  # ← CHIAVE: impedisce il collasso
         
         tk.Button(button_frame, text="OK", command=self.on_ok,
                  bg="lightgreen", font=("Arial", 10, "bold"),
