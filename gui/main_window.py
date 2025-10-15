@@ -46,6 +46,9 @@ class AIDOXAApp(tk.Tk):
         # Restore window layout
         self.after(200, self.restore_window_layout)
 
+        # ✅ NUOVO: Avvia polling per reflow automatico
+        self.after(500, self.check_groups_reflow_needed)
+        
         def initialize_category_database_if_needed(self):
             """Initialize category database for dynamic management if not already done"""
             try:
@@ -451,11 +454,40 @@ class AIDOXAApp(tk.Tk):
         self.vscrollbar.config(command=self.canvas.yview)
 
         self.content_frame = tk.Frame(self.canvas, bg="white")
-        self.canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
+        self.canvas_window = self.canvas.create_window((0, 0), window=self.content_frame, anchor="nw")
+        
+        # ✅ CRITICO: Ridimensiona content_frame con canvas
+        def on_canvas_configure(event):
+            canvas_width = event.width
+            print(f"[CANVAS] Canvas resized to: {canvas_width}px")  # ✅ DEBUG
+            self.canvas.itemconfig(self.canvas_window, width=canvas_width)
+            # Trigger reflow dopo resize
+            if hasattr(self, 'trigger_all_groups_reflow'):
+                if hasattr(self, '_canvas_resize_timer'):
+                    self.after_cancel(self._canvas_resize_timer)
+                self._canvas_resize_timer = self.after(300, self.trigger_all_groups_reflow)
+        
+        self.canvas.bind('<Configure>', on_canvas_configure)
+        
+        # ✅ CRITICO: Ridimensiona content_frame con canvas
+        def resize_content_frame(event):
+            # Imposta larghezza content_frame = larghezza canvas
+            canvas_width = event.width
+            self.canvas.itemconfig(canvas_window, width=canvas_width)
+        
+        self.canvas.bind('<Configure>', resize_content_frame, add='+')
 
-        # Bind scroll events
-        self.content_frame.bind("<Configure>", 
-                               lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        # ✅ NUOVO: Bind canvas resize per trigger reflow
+        self.canvas.bind('<Configure>', self.on_canvas_resize_trigger_reflow)
+    
+    def on_canvas_resize_trigger_reflow(self, event):
+        """Trigger reflow quando canvas cambia dimensione"""
+        if event.widget == self.canvas:
+            # Cancella timer precedente
+            if hasattr(self, '_canvas_resize_timer'):
+                self.after_cancel(self._canvas_resize_timer)
+            # Schedule reflow dopo 200ms
+            self._canvas_resize_timer = self.after(200, self.trigger_all_groups_reflow)
         
         # Mouse wheel scrolling - MIGLIORATO con caricamento thumbnail
         def on_mousewheel(event):
@@ -847,14 +879,46 @@ class AIDOXAApp(tk.Tk):
         # Batch shortcut
         if self.config_manager.get('batch_mode_enabled', True):
             self.bind_all('<Control-b>', lambda e: self.open_batch_manager())
-        
-        # Window events
-        # if self.config_manager.get('save_window_layout', True):
-        #    self.bind('<Configure>', self.on_window_configure)
-        #    self.bind_all('<B1-Motion>', self.on_paned_motion)
-        #    self.bind_all('<ButtonRelease-1>', self.on_paned_release)
-        
+            
+        # Window events               
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        # ✅ NUOVO: Bind sash motion del PanedWindow per reflow thumbnail
+        if hasattr(self, 'main_paned'):
+            # Bind al rilascio del sash (quando finisci di trascinare)
+            self.main_paned.bind('<ButtonRelease-1>', self.on_paned_sash_release)
+            # Bind anche durante il drag per feedback live (opzionale)
+            self.main_paned.bind('<B1-Motion>', self.on_paned_sash_drag)
+    
+    def on_paned_sash_release(self, event):
+        """Handle PanedWindow sash release - trigger thumbnail reflow"""
+        self.after(50, self.trigger_all_groups_reflow)
+    
+    def on_paned_sash_drag(self, event):
+        """Handle PanedWindow sash drag - live reflow (opzionale)"""
+        # Cancella timer precedente per evitare troppi reflow
+        if hasattr(self, '_reflow_timer'):
+            self.after_cancel(self._reflow_timer)
+        # Schedule reflow dopo 100ms
+        self._reflow_timer = self.after(100, self.trigger_all_groups_reflow)
+    
+    def trigger_all_groups_reflow(self):
+        """Trigger reflow su tutti i document groups"""
+        if not hasattr(self, 'documentgroups'):
+            return
+        
+        for group in self.documentgroups:
+            try:
+                # Forza ricalcolo layout
+                frame_width = group.pages_frame.winfo_width()
+                if frame_width > 10:
+                    new_per_row = group.calculate_optimal_thumbnails_per_row()
+                    if new_per_row != group.thumbnails_per_row:
+                        group.thumbnails_per_row = new_per_row
+                        group.repack_thumbnails_grid()
+                        self.debug_print(f"Reflow triggered: {new_per_row} per row (width: {frame_width}px)")
+            except Exception as e:
+                self.debug_print(f"Error in group reflow: {e}")
 
     # Event handlers
     def on_canvas_enter(self, event):
@@ -994,6 +1058,70 @@ class AIDOXAApp(tk.Tk):
             self.content_frame.update_idletasks()
         except Exception as e:
             self.debug_print(f"Error updating UI: {e}")
+
+    # ✅ AGGIUNGI QUESTO METODO QUI
+    def check_groups_reflow_needed(self):
+        """Check periodicamente se serve reflow (ogni 500ms)"""
+        if hasattr(self, 'documentgroups') and self.documentgroups:
+            for idx, group in enumerate(self.documentgroups):
+                try:
+                    frame_width = group.pages_frame.winfo_width()
+                    
+                    # ✅ DEBUG: Stampa larghezza frame
+                    if idx == 0:  # Solo primo gruppo per non spammare
+                        print(f"[REFLOW] Group 0: width={frame_width}px, per_row={group.thumbnails_per_row}")
+                    
+                    # ✅ Inizializza last_calculated_width se non esiste
+                    if not hasattr(group, 'last_calculated_width'):
+                        group.last_calculated_width = frame_width
+                        print(f"[REFLOW] Initialized last_width for group {idx}: {frame_width}px")
+                        continue
+                    
+                    # Se larghezza cambiata significativamente
+                    width_change = abs(frame_width - group.last_calculated_width)
+                    
+                    # ✅ DEBUG: Stampa cambio larghezza
+                    if width_change > 20 and idx == 0:
+                        print(f"[REFLOW] Width changed: {group.last_calculated_width}px -> {frame_width}px (change: {width_change}px)")
+                    
+                    if width_change > 20 and frame_width > 10:
+                        new_per_row = group.calculate_optimal_thumbnails_per_row()
+                        
+                        # ✅ DEBUG: Stampa nuovo per_row
+                        print(f"[REFLOW] Group {idx}: {group.thumbnails_per_row} -> {new_per_row} per row")
+                        
+                        if new_per_row != group.thumbnails_per_row:
+                            group.thumbnails_per_row = new_per_row
+                            group.last_calculated_width = frame_width
+                            group.repack_thumbnails_grid()
+                            self.debug_print(f"✅ Auto-reflow: {new_per_row} per row (width: {frame_width}px)")
+                
+                except Exception as e:
+                    print(f"[REFLOW ERROR] {e}")
+                    import traceback
+                    traceback.print_exc()
+        
+        # Re-schedule check
+        self.after(500, self.check_groups_reflow_needed)
+    
+    def trigger_all_groups_reflow(self):
+        """Trigger reflow su tutti i document groups"""
+        if not hasattr(self, 'documentgroups'):
+            return
+        
+        for group in self.documentgroups:
+            try:
+                # Forza ricalcolo layout
+                frame_width = group.pages_frame.winfo_width()
+                if frame_width > 10:
+                    new_per_row = group.calculate_optimal_thumbnails_per_row()
+                    if new_per_row != group.thumbnails_per_row:
+                        group.thumbnails_per_row = new_per_row
+                        group.last_calculated_width = frame_width
+                        group.repack_thumbnails_grid()
+                        self.debug_print(f"Reflow triggered: {new_per_row} per row (width: {frame_width}px)")
+            except Exception as e:
+                self.debug_print(f"Error in group reflow: {e}")
         
     # Menu handlers
     def open_settings(self):
@@ -1408,7 +1536,7 @@ class AIDOXAApp(tk.Tk):
                 for page_num in range(1, min(documentloader.totalpages + 1, 51)):
                     group.add_page_lazy(page_num, documentloader)
                 
-                group.pack(pady=5, fill='x', padx=5)
+                group.pack(pady=5, fill='both', expand=False, padx=5)
                 self.documentgroups.append(group)
                 
                 self.debug_print(f"✅ Document {doc_index}/{total_docs} structure loaded")
@@ -1450,7 +1578,7 @@ class AIDOXAApp(tk.Tk):
                 group.pdf_path = doc_info['pdf']  # Salva path per caricamento lazy
                 
                 # NON aggiungere pagine ancora (solo header)
-                group.pack(pady=5, fill='x', padx=5)
+                group.pack(pady=5, fill='both', expand=False, padx=5)
                 self.documentgroups.append(group)
                 
                 # Update UI ogni 2 documenti
@@ -1495,7 +1623,7 @@ class AIDOXAApp(tk.Tk):
                 for page_num in range(1, min(doc_data['loader'].totalpages + 1, 51)):
                     group.add_page_lazy(page_num, doc_data['loader'])
                 
-                group.pack(pady=5, fill='x', padx=5)
+                group.pack(pady=5, fill='both', expand=False, padx=5)
                 self.documentgroups.append(group)
                 
                 # Update UI ogni 2 documenti
@@ -1700,7 +1828,7 @@ class AIDOXAApp(tk.Tk):
         for page_num in range(1, self.documentloader.totalpages + 1):
             group.add_page_lazy(page_num, self.documentloader)
             
-        group.pack(pady=5, fill='x', padx=5)
+        group.pack(pady=5, fill='both', expand=False, padx=5)
         self.documentgroups.append(group)
         
         self.after_idle(self.update_scroll_region)

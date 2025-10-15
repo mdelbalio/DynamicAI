@@ -27,34 +27,25 @@ class DocumentGroup:
         self.thumbnails_per_row = 4  # Default thumbnails per row
         self.min_thumbnails_per_row = 2
         self.max_thumbnails_per_row = 6
-        self.last_calculated_width = 0  # ✅ Cache per evitare calcoli ridondanti
-                
+        
         # Create UI elements
         self.create_widgets()
         self.bind_events()
 
     def create_widgets(self):
         """Create the document group UI widgets"""
-        # Main frame with colored background - RESPONSIVE
+        # Main frame with colored background
         self.frame = tk.Frame(self.parent, bd=2, relief="ridge", bg="#f0f0f0")
-        
-        # ✅ CRITICO: NON usare grid_propagate, usa pack_propagate
-        self.frame.pack_propagate(True)  # Permetti ridimensionamento con pack
         
         # Create header with document counter and category name
         self.create_header()
         
-        # Container for thumbnails with grid layout - RESPONSIVE
+        # Container for thumbnails with grid layout
         self.pages_frame = tk.Frame(self.frame, bg="white")
         self.pages_frame.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # ✅ Configure grid weights for responsive layout (tutte le colonne si espandono)
-        for col in range(6):  # Max 6 colonne possibili
-            self.pages_frame.grid_columnconfigure(col, weight=1, uniform="thumbnail")
-        
-        # ✅ NUOVO: Le righe si espandono verticalmente
-        for row in range(20):  # Max 20 righe (supporta fino a 80 thumbnail con 4/row)
-            self.pages_frame.grid_rowconfigure(row, weight=0)  # Le righe NON si espandono (solo le colonne)
+        # Configure grid weights for responsive layout
+        self.pages_frame.grid_columnconfigure((0, 1, 2, 3, 4, 5), weight=1)
 
     def create_header(self):
         """Create the document group header with counter and category"""
@@ -307,12 +298,21 @@ class DocumentGroup:
                                     current_frame_width // total_thumb_width))
             self.thumbnails_per_row = optimal_per_row
         
-        # Grid layout - RESPONSIVE con sticky
+        # Grid layout
         for i, thumb in enumerate(self.thumbnails):
             row = i // self.thumbnails_per_row
             col = i % self.thumbnails_per_row
-            # ✅ sticky="new" = espandi orizzontalmente (east-west) e allinea in alto (north)
-            thumb.grid(row=row, column=col, padx=3, pady=3, sticky="new")
+            thumb.grid(row=row, column=col, padx=3, pady=3, sticky="n")
+        
+        # Auto-resize the frame height based on number of rows
+        num_rows = math.ceil(total_thumbnails / self.thumbnails_per_row)
+        thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
+        label_height = 20  # Approximate height of page label
+        total_thumb_height = thumb_height + label_height + 6  # 6px padding
+        min_frame_height = num_rows * total_thumb_height + 10  # 10px extra padding
+        
+        # Update frame minimum height
+        self.pages_frame.configure(height=min_frame_height)
 
     def repack_thumbnails(self):
         """Legacy method - redirects to grid layout"""
@@ -360,39 +360,20 @@ class DocumentGroup:
         return min(closest_position, len(self.thumbnails))
 
     def calculate_optimal_thumbnails_per_row(self) -> int:
-        """Calculate optimal thumbnails per row based on CURRENT frame width"""
+        """Calculate optimal number of thumbnails per row based on current frame width"""
         frame_width = self.pages_frame.winfo_width()
-        
-        if frame_width <= 10:
-            return self.thumbnails_per_row  # Usa valore corrente se frame non pronto
+        if frame_width <= 1:
+            return self.thumbnails_per_row  # Return current if width not available
         
         thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
-        padding = 6
-        border = 10
+        padding_per_thumbnail = 6  # 3px padding on each side
+        total_thumb_width = thumb_width + padding_per_thumbnail
         
-        available_width = frame_width - border
-        total_thumb_width = thumb_width + padding
+        optimal_per_row = max(self.min_thumbnails_per_row, 
+                            min(self.max_thumbnails_per_row, 
+                                frame_width // total_thumb_width))
         
-        calculated = max(1, available_width // total_thumb_width)
-        
-        # Limita tra min e max
-        return max(self.min_thumbnails_per_row, 
-                  min(self.max_thumbnails_per_row, calculated))
-
-    def force_reflow(self):
-        """Forza ricalcolo layout (chiamato da drag sash)"""
-        try:
-            frame_width = self.pages_frame.winfo_width()
-            if frame_width > 10:
-                new_per_row = self.calculate_optimal_thumbnails_per_row()
-                if new_per_row != self.thumbnails_per_row:
-                    self.thumbnails_per_row = new_per_row
-                    self.last_calculated_width = frame_width
-                    self.repack_thumbnails_grid()
-                    return True
-        except Exception as e:
-            self.mainapp.debug_print(f"Error in force reflow: {e}")
-        return False
+        return optimal_per_row
 
     def update_categoryname(self, new_name: str):
         """Update the category name display"""
@@ -471,28 +452,7 @@ class DocumentGroup:
 
     def pack(self, **kwargs):
         """Pack the document group frame"""
-        # ✅ Forza fill='both' se non specificato
-        if 'fill' not in kwargs:
-            kwargs['fill'] = 'both'
-        if 'expand' not in kwargs:
-            kwargs['expand'] = False
-        
         self.frame.pack(**kwargs)
-        
-        # ✅ Trigger calcolo iniziale dopo pack
-        self.mainapp.after(100, self._initial_layout_calculation)
-
-    def _initial_layout_calculation(self):
-        """Calcola layout iniziale dopo che il frame è stato renderizzato"""
-        try:
-            frame_width = self.pages_frame.winfo_width()
-            if frame_width > 10:
-                self.thumbnails_per_row = self.calculate_optimal_thumbnails_per_row()
-                self.last_calculated_width = frame_width
-                self.repack_thumbnails_grid()
-                self.mainapp.debug_print(f"Initial layout: {self.thumbnails_per_row} per row (width: {frame_width}px)")
-        except Exception as e:
-            self.mainapp.debug_print(f"Error in initial layout: {e}")
 
     def pack_forget(self):
         """Remove the document group from display"""

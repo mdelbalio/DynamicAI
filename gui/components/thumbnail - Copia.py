@@ -68,23 +68,18 @@ class PageThumbnail:
                 self.mainapp.debug_print(f"Error in auto-load: {e}")
 
     def create_widgets(self):
-        """Create the thumbnail UI widgets - RESPONSIVE"""
+        """Create the thumbnail UI widgets"""
         # Main frame with enhanced selection styling
         self.frame = tk.Frame(self.parent, bd=2, relief="solid", bg="white")
         
-        # ✅ NUOVO: Configura frame per centrare contenuto
-        self.frame.grid_rowconfigure(0, weight=1)  # Image row si espande
-        self.frame.grid_rowconfigure(1, weight=0)  # Label row fissa
-        self.frame.grid_columnconfigure(0, weight=1)  # Colonna si espande
-        
-        # Image Label - centrata
+        # Image Label
         self.img_label = tk.Label(self.frame, image=self.thumbnail_img_tk, bg="white", cursor="hand2")
-        self.img_label.grid(row=0, column=0, padx=2, pady=2, sticky="n")  # Allineata in alto
+        self.img_label.pack(padx=2, pady=2)
         
-        # Page label - centrata in basso
+        # Page label
         self.text_label = tk.Label(self.frame, text=f"Pagina {self.pagenum}", 
                                   font=("Arial", 8, "bold"), bg="white")
-        self.text_label.grid(row=1, column=0, pady=(0, 2), sticky="ew")  # Si espande orizzontalmente
+        self.text_label.pack(pady=(0, 2))
 
     def bind_events(self):
         """Bind mouse events for drag and drop and selection"""
