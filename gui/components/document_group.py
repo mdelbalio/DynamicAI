@@ -26,13 +26,21 @@ class DocumentGroup:
         # Grid layout settings
         self.thumbnails_per_row = 4  # Default thumbnails per row
         self.min_thumbnails_per_row = 2
-        self.max_thumbnails_per_row = 6
+        self.max_thumbnails_per_row = 4
         self.last_calculated_width = 0  # ✅ Cache per evitare calcoli ridondanti
-                
+
         # Create UI elements
         self.create_widgets()
         self.bind_events()
-
+        
+        # Configura massimo 4 colonne nel grid
+        for col in range(4):  # ← Cambia da range(6) a range(4)
+            self.pages_frame.grid_columnconfigure(col, weight=1, uniform='thumbnail')
+            
+        # Configura le righe (max 20 righe supporta fino a 80 thumbnail con 4/row)
+        for row in range(20):
+            self.pages_frame.grid_rowconfigure(row, weight=0)  # Le righe NON si espandono
+                        
     def create_widgets(self):
         """Create the document group UI widgets"""
         # Main frame with colored background - RESPONSIVE
@@ -360,25 +368,21 @@ class DocumentGroup:
         return min(closest_position, len(self.thumbnails))
 
     def calculate_optimal_thumbnails_per_row(self) -> int:
-        """Calculate optimal thumbnails per row based on CURRENT frame width"""
         frame_width = self.pages_frame.winfo_width()
-        
         if frame_width <= 10:
-            return self.thumbnails_per_row  # Usa valore corrente se frame non pronto
-        
+            return self.thumbnails_per_row  # Usa valore corrente se frame non è pronto
+            
         thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
         padding = 6
         border = 10
-        
         available_width = frame_width - border
         total_thumb_width = thumb_width + padding
         
         calculated = max(1, available_width // total_thumb_width)
         
-        # Limita tra min e max
-        return max(self.min_thumbnails_per_row, 
-                  min(self.max_thumbnails_per_row, calculated))
-
+        # ✅ FORZA massimo 4 colonne
+        return max(self.min_thumbnails_per_row, min(4, calculated))  # ← 4 invece di self.max_thumbnails_per_row
+    
     def force_reflow(self):
         """Forza ricalcolo layout (chiamato da drag sash)"""
         try:

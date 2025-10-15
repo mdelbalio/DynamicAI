@@ -52,9 +52,13 @@ DEFAULT_CONFIG = {
     'save_window_layout': True,
     'auto_fit_images': True,
     'show_debug_info': False,
+    'debug_reflow': False,     # ← Aggiungi questa nuova chiave
     'thumbnail_width': 80,
     'thumbnail_height': 100,
     'thumbnail_keep_aspect_ratio': False,  # Mantieni rapporto d'aspetto
+    'max_thumbnails_per_row': 4,           # ← AGGIUNGI QUESTA RIGA
+    'min_thumbnails_per_row': 2,           # ← AGGIUNGI QUESTA RIGA  
+    'default_thumbnails_per_row': 4,       # ← AGGIUNGI QUESTA RIGA
     'last_folder': '',
     
     # ---- NUOVO: Gestione CSV e JSON ----

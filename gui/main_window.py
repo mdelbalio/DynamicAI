@@ -648,6 +648,41 @@ class AIDOXAApp(tk.Tk):
         # Hover effects
         self.image_canvas.bind("<Enter>", self.on_canvas_enter)
         self.image_canvas.bind("<Leave>", self.on_canvas_leave)
+
+        # ✅ NUOVO: Mouse wheel scroll verticale per immagini zoommatte
+        self.image_canvas.bind("<MouseWheel>", self.on_image_mouse_wheel)
+        self.image_canvas.bind("<Button-4>", self.on_image_mouse_wheel)  # Linux scroll up
+        self.image_canvas.bind("<Button-5>", self.on_image_mouse_wheel)  # Linux scroll down
+
+    def on_image_mouse_wheel(self, event):
+        """Handle mouse wheel scroll for vertical image panning when zoomed"""
+        if not self.current_image:
+            return
+            
+        # Solo se l'immagine è zoomata (factor > 1.0) o in modalità full width
+        if self.zoom_factor > 1.0:
+            # Determina direzione scroll
+            if hasattr(event, 'delta'):  # Windows
+                if event.delta > 0:  # Scroll up
+                    direction = -1
+                else:  # Scroll down
+                    direction = 1
+            elif hasattr(event, 'num'):  # Linux
+                if event.num == 4:  # Scroll up
+                    direction = -1
+                else:  # Scroll down (event.num == 5)
+                    direction = 1
+            else:
+                return
+            
+            # Esegui scroll verticale
+            try:
+                self.image_canvas.yview_scroll(direction, "units")
+            except:
+                pass  # Ignora errori se scrolling non possibile
+                
+            return "break"  # Prevent event propagation
+            
     def setup_right_panel(self):
         """Setup right panel with controls and metadata"""
         # Header
@@ -1069,12 +1104,14 @@ class AIDOXAApp(tk.Tk):
                     
                     # ✅ DEBUG: Stampa larghezza frame
                     if idx == 0:  # Solo primo gruppo per non spammare
-                        print(f"[REFLOW] Group 0: width={frame_width}px, per_row={group.thumbnails_per_row}")
+                        if self.config_manager.get('debug_reflow', False):
+                            print(f"[REFLOW] Group 0: width={frame_width}px, per_row={group.thumbnails_per_row}")
                     
                     # ✅ Inizializza last_calculated_width se non esiste
                     if not hasattr(group, 'last_calculated_width'):
                         group.last_calculated_width = frame_width
-                        print(f"[REFLOW] Initialized last_width for group {idx}: {frame_width}px")
+                        if self.config_manager.get('debug_reflow', False):
+                            print(f"[REFLOW] Initialized last_width for group {idx}: {frame_width}px")
                         continue
                     
                     # Se larghezza cambiata significativamente
@@ -1082,13 +1119,15 @@ class AIDOXAApp(tk.Tk):
                     
                     # ✅ DEBUG: Stampa cambio larghezza
                     if width_change > 20 and idx == 0:
-                        print(f"[REFLOW] Width changed: {group.last_calculated_width}px -> {frame_width}px (change: {width_change}px)")
+                        if self.config_manager.get('debug_reflow', False):
+                            print(f"[REFLOW] Width changed: {group.last_calculated_width}px -> {frame_width}px (change: {width_change}px)")
                     
                     if width_change > 20 and frame_width > 10:
                         new_per_row = group.calculate_optimal_thumbnails_per_row()
                         
                         # ✅ DEBUG: Stampa nuovo per_row
-                        print(f"[REFLOW] Group {idx}: {group.thumbnails_per_row} -> {new_per_row} per row")
+                        if self.config_manager.get('debug_reflow', False):
+                            print(f"[REFLOW] Group {idx}: {group.thumbnails_per_row} -> {new_per_row} per row")
                         
                         if new_per_row != group.thumbnails_per_row:
                             group.thumbnails_per_row = new_per_row
@@ -2763,10 +2802,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         
         self.debug_print(f"Image size: {image.size if image else 'None'}")
         
-        if self.config_manager.get('auto_fit_images', True):
-            self.after_idle(self.zoom_fit)
-        else:
-            self.after_idle(self.update_image_display)
+        self.after_idle(self.fit_width)  # ← CAMBIATO da zoom_fit a fit_width
         
         self.debug_print("display_image completed")
 

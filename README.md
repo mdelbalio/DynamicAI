@@ -6,16 +6,43 @@
 
 ## Struttura organizzativa
 
-- **main.py** – Entry point semplice e pulito  
-- **config/** – Gestione configurazione e costanti  
-- **database/** – Persistenza e gestione database SQLite  
-- **gui/dialogs/** – Finestre di dialogo (impostazioni, selezione categoria)  
-- **gui/components/** – Componenti UI riutilizzabili (miniature, gruppi documento)  
-- **loaders/** – Caricamento documenti PDF/TIFF  
-- **export/** – Gestione export in tutti i formati  
-- **gui/main_window.py** – Finestra principale semplificata  
-- **utils/** – Helper e funzioni di utilità  
-- **assets/icons/** – Icone dell’applicazione (runtime e build)
+DynamicAI/
+├── main.py                    # Entry point con error handling robusto
+├── batch/                     # Sistema batch multi-livello avanzato
+│   ├── __init__.py
+│   ├── scanner.py            # Scansione ricorsiva intelligente
+│   ├── batch_database.py     # Database recovery crash
+│   └── batch_exporter.py     # Export preservando struttura
+├── config/                   # Configurazione multi-piattaforma
+│   ├── __init__.py
+│   ├── settings.py          # ConfigManager con path dinamici
+│   └── constants.py         # DEFAULT_CONFIG v3.6 BATCH
+├── database/                 # Database categorie avanzato
+│   ├── __init__.py
+│   └── category_db.py       # Dynamic JSON tracking + protezione
+├── export/                   # Export manager enterprise
+│   ├── __init__.py
+│   └── export_manager.py    # 30K+ caratteri, 5 formati, numerazione
+├── gui/                      # Interfaccia grafica suprema
+│   ├── __init__.py
+│   ├── main_window.py       # 150K+ caratteri, GUI professionale
+│   ├── components/          # Componenti UI avanzati
+│   │   ├── __init__.py
+│   │   ├── thumbnail.py     # Lazy loading + drag&drop
+│   │   └── document_group.py # Layout grid responsive
+│   └── dialogs/             # Dialog system enterprise
+│       ├── __init__.py
+│       ├── batch_manager.py  # 55K+ caratteri batch supremo
+│       ├── settings_dialog.py # 54K+ caratteri, 8 tab
+│       ├── category_dialog.py # Selezione categorie intelligente
+│       └── fix_database.py   # Utility migrazione schema
+├── loaders/                  # Document loader enterprise
+│   ├── __init__.py
+│   └── document_loaders.py  # MemoryAwareLRUCache + PDF/TIFF
+└── utils/                    # Utilities sistema enterprise
+    ├── __init__.py
+    ├── helpers.py           # 13K+ caratteri utilities supremo
+    └── branding.py          # Sistema branding cross-platform
 
 ### Vantaggi principali
 - Ogni classe ha una responsabilità specifica
