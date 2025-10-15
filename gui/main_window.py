@@ -35,7 +35,7 @@ class AIDOXAApp(tk.Tk):
         self.category_db = CategoryDatabase(DB_FILE)
         # 🆕 Initialize category database for dynamic management
         self.initialize_category_database_if_needed()
-        self.export_manager = ExportManager(self.config_manager.config_data)
+        self.export_manager = ExportManager(self.config_manager)
         
         # Initialize application
         self.init_variables()
@@ -76,6 +76,8 @@ class AIDOXAApp(tk.Tk):
         self.original_data = None
         self.current_document_name = ""
         self.all_categories: Set[str] = set()
+        self.document_groups = []  # ✅ AGGIUNGI QUESTA RIGA
+        self.pdf_files = []        # ✅ AGGIUNGI ANCHE QUESTA
         
         # Metadata management - NUOVO
         self.header_metadata: Dict[str, str] = {
@@ -131,6 +133,7 @@ class AIDOXAApp(tk.Tk):
     def setup_ui(self):
         """Setup the user interface"""
         self.create_menu()
+        self.create_progress_toolbar()
         self.create_widgets()
         self.setup_left_panel()
         self.setup_center_panel()
@@ -188,6 +191,38 @@ class AIDOXAApp(tk.Tk):
         categories_menu.add_command(label="Pulizia Categorie", command=self.cleanup_old_categories)
         categories_menu.add_separator()
         categories_menu.add_command(label="🔧 Fix Database Schema", command=self.fix_database_schema)
+
+    def create_progress_toolbar(self):
+        """Create progress toolbar for background loading"""
+        self.progress_toolbar = tk.Frame(self, bg="#2C3E50", height=35)
+        self.progress_toolbar.pack(side="top", fill="x", after=self.menubar if hasattr(self, 'menubar') else None)
+        
+        # Container centrato
+        container = tk.Frame(self.progress_toolbar, bg="#2C3E50")
+        container.pack(side="left", fill="x", expand=True, padx=10, pady=5)
+        
+        # Icona + Label status
+        self.progress_status_label = tk.Label(
+            container, text="", bg="#2C3E50", fg="white",
+            font=("Arial", 9)
+        )
+        self.progress_status_label.pack(side="left", padx=(0, 10))
+        
+        # Progress bar
+        self.background_progress_bar = ttk.Progressbar(
+            container, mode='determinate', length=300
+        )
+        self.background_progress_bar.pack(side="left", padx=5)
+        
+        # Percentage label
+        self.progress_percent_label = tk.Label(
+            container, text="", bg="#2C3E50", fg="white",
+            font=("Arial", 9, "bold")
+        )
+        self.progress_percent_label.pack(side="left", padx=(5, 0))
+        
+        # Nascondi toolbar inizialmente
+        self.progress_toolbar.pack_forget()
                 
     def show_document_info_dialog(self):
         """Show document information in a dialog"""
@@ -422,10 +457,17 @@ class AIDOXAApp(tk.Tk):
         self.content_frame.bind("<Configure>", 
                                lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         
-        # Mouse wheel scrolling - MIGLIORATO
+        # Mouse wheel scrolling - MIGLIORATO con caricamento thumbnail
         def on_mousewheel(event):
             self.canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            return "break"  # Previene propagazione evento
+            # Trigger immediato caricamento thumbnail
+            if hasattr(self, 'load_visible_thumbnails_progressive'):
+                # Cancella timer precedente se esiste
+                if hasattr(self, '_scroll_timer'):
+                    self.after_cancel(self._scroll_timer)
+                # Avvia nuovo timer (carica dopo 200ms di stop scroll)
+                self._scroll_timer = self.after(200, self.load_visible_thumbnails_progressive)
+            return "break" 
         
         def bind_mousewheel(widget):
             """Bind ricorsivo su tutti i widget figli"""
@@ -945,6 +987,14 @@ class AIDOXAApp(tk.Tk):
             self.instructions_text.delete("1.0", tk.END)
             self.instructions_text.insert(tk.END, text)
 
+    def update_ui_non_blocking(self):
+        """Forza update UI senza bloccare"""
+        try:
+            self.update_idletasks()
+            self.content_frame.update_idletasks()
+        except Exception as e:
+            self.debug_print(f"Error updating UI: {e}")
+        
     # Menu handlers
     def open_settings(self):
         """Open settings dialog"""
@@ -1076,7 +1126,7 @@ class AIDOXAApp(tk.Tk):
 
     # Document loading and management
     def refresh_document_list(self):
-        """Load document from configured input folder - supports both modes"""
+        """Load documents from configured input folder - intelligent workflow detection"""
         input_folder = self.config_manager.get('default_input_folder', '')
 
         if not input_folder or not os.path.exists(input_folder):
@@ -1087,226 +1137,464 @@ class AIDOXAApp(tk.Tk):
 
         self.input_folder_name = os.path.basename(os.path.normpath(input_folder))
 
-        # ========================================
-        # 🔧 FIX DEFINITIVO: Supporto cartella JSON separata
-        # ========================================
-
-        # Leggi configurazione JSON folder
-        # ✅ Leggi configurazione con CHIAVI CORRETTE
+        # JSON folder configuration
         use_same_folder_flag = self.config_manager.get('use_same_folder_for_json', True)
         json_folder_config = self.config_manager.get('json_folder', '').strip()
 
-
-        # 🚨 CRITICAL DEBUG - Stampa configurazione corrente
         self.debug_print("=== JSON Configuration Debug ===")
         self.debug_print(f"input_folder: {input_folder}")
         self.debug_print(f"use_same_folder_for_json FLAG: {use_same_folder_flag}")
         self.debug_print(f"json_folder CONFIG: '{json_folder_config}'")
 
-        # Determina quale cartella usare per il JSON
-        # LOGICA: Se flag è TRUE → usa stessa cartella
-        #         Se flag è FALSE → usa cartella separata
         if use_same_folder_flag:
-            # ✅ MODALITÀ 1: Usa la stessa cartella del documento (checkbox ABILITATO)
             json_folder = input_folder
-            self.debug_print(f"✅ MODE: SAME FOLDER → {json_folder}")
+            self.debug_print(f"MODE: SAME FOLDER -> {json_folder}")
         else:
-            # ✅ MODALITÀ 2: Usa cartella JSON separata (checkbox DISABILITATO)
             if not json_folder_config:
                 messagebox.showwarning("Attenzione",
                             "Checkbox 'Usa stessa cartella' disabilitato ma nessuna "
                             "cartella JSON separata configurata.\n\n"
                             "Verrà usata la stessa cartella del documento.")
                 json_folder = input_folder
-                self.debug_print(f"⚠️ MODE: SEPARATE FOLDER (fallback to same) → {json_folder}")
+                self.debug_print(f"MODE: SEPARATE FOLDER (fallback to same) -> {json_folder}")
             else:
                 json_folder = json_folder_config
                 
-                # Verifica che la cartella esista
                 if not os.path.exists(json_folder):
                     messagebox.showerror("Errore", 
                                 f"La cartella JSON separata non esiste:\n{json_folder}\n\n"
-                                "Verifica il percorso nelle Preferenze → Percorsi.")
+                                "Verifica il percorso nelle Preferenze -> Percorsi.")
                     return
                 
-                self.debug_print(f"✅ MODE: SEPARATE FOLDER → {json_folder}")
+                self.debug_print(f"MODE: SEPARATE FOLDER -> {json_folder}")
 
-        # ✅ Il codice continua normalmente per entrambi i casi
-        self.debug_print(f"✅ JSON FOLDER: {json_folder}")
-
+        self.debug_print(f"JSON FOLDER: {json_folder}")
         self.debug_print("================================")
         
-        json_file = None
-        doc_file = None
-
-        # Cerca documento nella cartella input
+        # Trova tutti i PDF+JSON
+        self.pdf_files = []
+        
         for file in os.listdir(input_folder):
             if file.lower().endswith(('.pdf', '.tiff', '.tif')):
-                doc_file = os.path.join(input_folder, file)
-                break  # Prendi il primo documento trovato
+                pdf_path = os.path.join(input_folder, file)
+                json_name = os.path.splitext(file)[0] + '.json'
+                json_path = os.path.join(json_folder, json_name)
+                
+                if os.path.exists(json_path):
+                    self.pdf_files.append({
+                        'pdf': pdf_path,
+                        'json': json_path,
+                        'name': os.path.splitext(file)[0]
+                    })
+                    self.debug_print(f"Found document: {pdf_path}")
+                    self.debug_print(f"Found JSON: {json_path}")
         
-        # Cerca JSON nella cartella appropriata (json_folder è già stato determinato sopra)
+        if not self.pdf_files:
+            messagebox.showerror("Errore",
+                f"Nessuna coppia PDF+JSON trovata.\n\n"
+                f"Cartella PDF: {input_folder}\n"
+                f"Cartella JSON: {json_folder}")
+            return
+        
+        self.debug_print(f"Found {len(self.pdf_files)} PDF+JSON pairs")
+        
+        # Analizza primo JSON per determinare workflow
         try:
-            for file in os.listdir(json_folder):
-                if file.lower().endswith('.json'):
-                    json_file = os.path.join(json_folder, file)
-                    break  # Prendi il primo JSON trovato
+            with open(self.pdf_files[0]['json'], 'r', encoding='utf-8') as f:
+                sample_data = json.load(f)
         except Exception as e:
-            messagebox.showerror("Errore", 
-                        f"Errore lettura cartella JSON:\n{json_folder}\n\n"
-                        f"Dettaglio: {str(e)}")
-            return
-
-        # ✅ VALIDAZIONE FILE TROVATI (indentazione corretta - stesso livello del try/except sopra)
-        if not doc_file:
-            messagebox.showerror("Errore", 
-                        "Nessun documento PDF/TIFF trovato nella cartella input:\n"
-                        f"{input_folder}")
-            return
-
-        if not json_file:
-            # Messaggio dinamico basato su quale cartella è stata usata per il JSON
-            if json_folder == input_folder:
-                # Stesso percorso = checkbox era abilitato
-                messagebox.showerror("Errore", 
-                            f"Nessun file JSON trovato nella cartella:\n{json_folder}\n\n"
-                            "Il file JSON deve trovarsi nella stessa cartella del documento.")
-            else:
-                # Percorso diverso = cartella separata configurata
-                messagebox.showerror("Errore", 
-                            f"Nessun file JSON trovato nella cartella JSON separata:\n{json_folder}\n\n"
-                            "Verifica che il file JSON si trovi nella cartella corretta.")
+            messagebox.showerror("Errore", f"Errore lettura JSON: {str(e)}")
             return
         
-        self.debug_print(f"Found document: {doc_file}")
-        self.debug_print(f"Found JSON: {json_file}")
+        # Determina workflow type
+        has_categories = 'categories' in sample_data and isinstance(sample_data['categories'], list) and len(sample_data['categories']) > 0
+        split_enabled = self.config_manager.get('split_documents_by_category', True)
+        
+        if has_categories and split_enabled:
+            # WORKFLOW 1: JSON CON CATEGORIE - Dialog selezione (UNO alla volta)
+            self.debug_print("WORKFLOW: SPLIT MODE (categories detected)")
+            self.load_single_document_with_split()
+        else:
+            # WORKFLOW 2: JSON FLAT - Carica TUTTI i documenti (PaperStream style)
+            self.debug_print("WORKFLOW: MULTI-DOCUMENT MODE (no categories)")
+            self.load_all_documents_flat()
 
+    def load_single_document_with_split(self):
+        """WORKFLOW 1: Carica UN documento con split categorie (dialog di selezione)"""
+        from tkinter import Toplevel, Listbox, Scrollbar, SINGLE, END
+        
+        # Mostra dialog di selezione
+        dialog = Toplevel(self)
+        dialog.title("Seleziona Documento")
+        dialog.geometry("500x400")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        tk.Label(dialog, text=f"Trovati {len(self.pdf_files)} documenti. Selezionane uno:",
+                font=("Arial", 10, "bold")).pack(pady=10)
+        
+        # Listbox con documenti
+        list_frame = tk.Frame(dialog)
+        list_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        scrollbar = Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+        
+        listbox = Listbox(list_frame, selectmode=SINGLE, font=("Arial", 9),
+                        yscrollcommand=scrollbar.set)
+        listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.config(command=listbox.yview)
+        
+        for doc in self.pdf_files:
+            listbox.insert(END, doc['name'])
+        
+        listbox.select_set(0)
+        
+        selected_doc = [None]
+        
+        def on_select():
+            selection = listbox.curselection()
+            if selection:
+                selected_doc[0] = self.pdf_files[selection[0]]
+                dialog.destroy()
+        
+        def on_cancel():
+            dialog.destroy()
+        
+        # Bottoni
+        btn_frame = tk.Frame(dialog)
+        btn_frame.pack(pady=10)
+        
+        tk.Button(btn_frame, text="Carica", command=on_select,
+                bg="#50C878", fg="white", font=("Arial", 10, "bold"),
+                width=12).pack(side="left", padx=5)
+        
+        tk.Button(btn_frame, text="Annulla", command=on_cancel,
+                bg="#E74C3C", fg="white", font=("Arial", 10, "bold"),
+                width=12).pack(side="left", padx=5)
+        
+        listbox.bind("<Double-Button-1>", lambda e: on_select())
+        
+        self.wait_window(dialog)
+        
+        if not selected_doc[0]:
+            return
+        
+        selected = selected_doc[0]
+        doc_file = selected['pdf']
+        json_file = selected['json']
+        self.current_document_name = selected['name']
+        
         try:
+            # Carica JSON e documento
             with open(json_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self.original_data = data
-        
-            # Carica metadati (dinamici)
+            
             self.load_metadata_from_json(data)
             
-            # 🆕 Store categories data per sincronizzazione
-            if 'categories' in data:
-                self.categories_data = data['categories']
-                print(f"[DEBUG] Stored {len(self.categories_data)} categories for sync")
-            
-            # 🆕 SINCRONIZZAZIONE DINAMICA CATEGORIE
-            # Check if JSON has categories and split is enabled
-            if hasattr(self, 'categories_data') and self.categories_data:
-                # Estrai categorie uniche dal JSON (escludendo "Pagina vuota")
-                all_json_categories = [cat.get('categoria', '') for cat in self.categories_data if cat.get('categoria')]
-                
-                # ❌ ESCLUDI "Pagina vuota" perché viene accorpata durante l'importazione
+            # Sincronizza categorie
+            if 'categories' in data and data['categories']:
+                all_json_categories = [cat.get('categoria', '') for cat in data['categories'] if cat.get('categoria')]
                 excluded_categories = ['Pagina vuota', 'pagina vuota', 'PAGINA VUOTA']
                 json_categories = list(set(cat for cat in all_json_categories if cat not in excluded_categories))
                 
                 if json_categories:
-                    # Sincronizza con database - le categorie JSON diventeranno protette
                     self.category_db.sync_json_categories(json_categories, json_file)
-                    print(f"[DEBUG] ✅ Synced {len(json_categories)} categories from JSON: {json_categories}")
-                    print(f"[DEBUG] ⚠️ Excluded categories: {[cat for cat in all_json_categories if cat in excluded_categories]}")
-                    
-                    # Aggiorna UI categorie
                     self.update_category_combobox()
-                    print(f"[DEBUG] ✅ Categories synchronized automatically!")
-        
-            # Determina modalità
-            has_categories = 'categories' in data and isinstance(data['categories'], list)
-            split_enabled = self.config_manager.get('split_documents_by_category', True)
-        
-            self.current_document_name = os.path.splitext(os.path.basename(doc_file))[0]
-        
+                    self.debug_print(f"Synced {len(json_categories)} categories from JSON")
+            
             # Carica documento
             self.load_document(doc_file)
-        
-            if has_categories and split_enabled:
-                # MODALITÀ 1: Dividi in documenti multipli
-                categories = data['categories']
-                self.all_categories = set(cat['categoria'] for cat in categories if cat['categoria'] != "Pagina vuota")
-                self.update_category_combo()
-                self.build_document_groups(categories)
-                self.debug_print(f"Mode: SPLIT - {len(categories)} categories, {len(self.documentgroups)} documents")
-            else:
-                # MODALITÀ 2: Documento unico con tutte le pagine
-                self.all_categories = set()
-                self.update_category_combo()
-                self.build_single_document()
-                self.debug_print(f"Mode: SINGLE DOCUMENT - {self.documentloader.totalpages} pages")
-        
-            self.debug_print(f"Document loaded with {len(self.header_metadata)} metadata fields")
+            
+            if not self.documentloader:
+                raise Exception("Errore nell'inizializzazione del document loader")
+            
+            # SPLIT MODE
+            categories = data['categories']
+            self.all_categories = set(cat['categoria'] for cat in categories if cat['categoria'] != "Pagina vuota")
+            self.update_category_combo()
+            self.build_document_groups(categories)
+            self.debug_print(f"Mode: SPLIT - {len(categories)} categories, {len(self.documentgroups)} documents")
+            
+            self.after(100, self.auto_load_first_image)
         
         except Exception as e:
             messagebox.showerror("Errore", f"Errore nel caricamento: {str(e)}")
             import traceback
             traceback.print_exc()
-            
-    def load_document_from_batch(self, doc_dict: Dict):
-        """
-        Carica documento da batch per validazione
+
+    def load_all_documents_flat(self):
+        """WORKFLOW 2: Carica TUTTI i documenti velocemente + thumbnail on-demand"""
+        # Reset workspace
+        for group in self.documentgroups:
+            group.destroy()
+        self.documentgroups.clear()
         
-        Args:
-            doc_dict: Dizionario documento da batch database
-        """
-        try:
-            # Reset workspace
-            self.reset_workspace()
+        # Dizionario per salvare metadati
+        if not hasattr(self, 'document_metadata_cache'):
+            self.document_metadata_cache = {}
+        self.document_metadata_cache.clear()
+        
+        # Mostra toolbar progress
+        if hasattr(self, 'progress_toolbar'):
+            self.progress_toolbar.pack(side="top", fill="x", before=self.main_paned)
+            self.progress_status_label.config(text="⏳ Caricamento...")
+            self.background_progress_bar['value'] = 0
+            self.progress_percent_label.config(text="0%")
+        
+        total_docs = len(self.pdf_files)
+        
+        # STEP 1: Pre-carica TUTTI i JSON (velocissimo)
+        self.debug_print("Pre-loading JSON metadata...")
+        for doc_index, doc_info in enumerate(self.pdf_files, 1):
+            try:
+                with open(doc_info['json'], 'r', encoding='utf-8') as f:
+                    doc_metadata = json.load(f)
+                self.document_metadata_cache[doc_index] = doc_metadata
+            except Exception as e:
+                self.debug_print(f"Error caching metadata: {e}")
+                self.document_metadata_cache[doc_index] = {}
+        
+        # Carica metadati primo documento
+        if self.pdf_files and 1 in self.document_metadata_cache:
+            self.load_metadata_from_json(self.document_metadata_cache[1])
+            self.current_document_name = self.pdf_files[0]['name']
+            self.debug_print("✅ First metadata loaded")
+        
+        # STEP 2: Carica TUTTI i documenti UNO alla volta (solo struttura)
+        def load_document_progressive(index):
+            """Carica UN documento alla volta con placeholder"""
+            if index >= total_docs:
+                # Finito!
+                self.after_idle(self.update_scroll_region)
+                
+                if hasattr(self, 'progress_toolbar'):
+                    self.progress_status_label.config(text="✅ Caricamento completato!")
+                    self.after(2000, lambda: self.progress_toolbar.pack_forget())
+                
+                self.debug_print(f"✅ All {total_docs} documents loaded")
+                
+                # Auto-seleziona primo
+                if self.documentgroups:
+                    self.after(100, lambda: self.select_document_group(self.documentgroups[0]))
+                
+                # Avvia caricamento thumbnail visibili
+                self.after(300, self.load_visible_thumbnails_progressive)
+                return
             
-            # Extract paths
-            doc_path = doc_dict['doc_path']
-            json_path = doc_dict['json_path']
-            json_data = doc_dict.get('json_data', {})
+            doc_info = self.pdf_files[index]
+            doc_index = index + 1
             
-            # Set input folder name from relative path
-            self.input_folder_name = os.path.basename(doc_dict['relative_path'])
-            if self.input_folder_name == '.':
-                self.input_folder_name = os.path.basename(os.path.dirname(doc_path))
+            # Update progress
+            progress = (doc_index / total_docs) * 100
+            if hasattr(self, 'progress_toolbar'):
+                self.background_progress_bar['value'] = progress
+                self.progress_percent_label.config(text=f"{progress:.0f}%")
+                self.progress_status_label.config(text=f"⏳ {doc_info['name']} ({doc_index}/{total_docs})")
             
-            # Store original data
-            self.original_data = json_data
+            try:
+                # Carica PDF
+                documentloader = create_document_loader(doc_info['pdf'])
+                documentloader.load()
+                
+                # Crea gruppo UI
+                group = DocumentGroup(self.content_frame, doc_info['name'], self, doc_index)
+                group.document_loader = documentloader
+                group.json_path = doc_info['json']
+                group.doc_metadata = self.document_metadata_cache.get(doc_index, {})
+                
+                # Aggiungi pagine SOLO come placeholder (NO caricamento immagini)
+                for page_num in range(1, min(documentloader.totalpages + 1, 51)):
+                    group.add_page_lazy(page_num, documentloader)
+                
+                group.pack(pady=5, fill='x', padx=5)
+                self.documentgroups.append(group)
+                
+                self.debug_print(f"✅ Document {doc_index}/{total_docs} structure loaded")
+                
+                # Update UI ogni 2 documenti
+                if doc_index % 2 == 0:
+                    self.update_idletasks()
+                
+            except Exception as e:
+                self.debug_print(f"Error loading document: {e}")
             
-            # Load metadata
-            self.load_metadata_from_json(json_data)
+            # Carica prossimo dopo 10ms (velocissimo)
+            self.after(10, lambda: load_document_progressive(index + 1))
+        
+        # Avvia caricamento progressivo
+        self.after(300, lambda: load_document_progressive(0))
+
+    def create_placeholder_for_remaining(self, start_index, total_docs):
+        """Crea PLACEHOLDER per documenti rimanenti (caricamento on-demand)"""
+        self.debug_print(f"Creating placeholders for documents {start_index+1}-{total_docs}")
+        
+        for doc_index in range(start_index, total_docs):
+            doc_info = self.pdf_files[doc_index]
+            doc_num = doc_index + 1
             
-            # Set document name
-            self.current_document_name = os.path.splitext(os.path.basename(doc_path))[0]
+            try:
+                # Update progress
+                progress = 50 + ((doc_index - start_index + 1) / (total_docs - start_index)) * 50
+                if hasattr(self, 'progress_toolbar'):
+                    self.background_progress_bar['value'] = progress
+                    self.progress_percent_label.config(text=f"{progress:.0f}%")
+                    self.progress_status_label.config(text=f"⏳ Preparazione {doc_info['name']}")
+                
+                # Crea gruppo SENZA caricare PDF (placeholder)
+                group = DocumentGroup(self.content_frame, doc_info['name'], self, doc_num)
+                group.document_loader = None  # Verrà caricato on-demand
+                group.json_path = doc_info['json']
+                group.doc_metadata = self.document_metadata_cache.get(doc_num, {})
+                group.pdf_path = doc_info['pdf']  # Salva path per caricamento lazy
+                
+                # NON aggiungere pagine ancora (solo header)
+                group.pack(pady=5, fill='x', padx=5)
+                self.documentgroups.append(group)
+                
+                # Update UI ogni 2 documenti
+                if doc_index % 2 == 0:
+                    self.update_idletasks()
+                
+            except Exception as e:
+                self.debug_print(f"Error creating placeholder: {e}")
+        
+        # Finito!
+        self.after_idle(self.update_scroll_region)
+        
+        if hasattr(self, 'progress_toolbar'):
+            self.progress_status_label.config(text="✅ Caricamento completato!")
+            self.after(2000, lambda: self.progress_toolbar.pack_forget())
+        
+        self.debug_print(f"✅ Created {total_docs - start_index} placeholders")
+        
+        # Avvia caricamento thumbnail visibili
+        self.after(500, self.load_visible_thumbnails_progressive)
+
+    def update_loading_progress(self, progress, doc_name, doc_index, total_docs):
+        """Update progress bar (chiamato da thread via after())"""
+        if hasattr(self, 'progress_toolbar'):
+            self.background_progress_bar['value'] = progress
+            self.progress_percent_label.config(text=f"{progress:.0f}%")
+            self.progress_status_label.config(text=f"⏳ {doc_name} ({doc_index}/{total_docs})")
+
+    def create_document_groups_from_loaded(self, loaded_docs, total_docs):
+        """Crea gruppi UI da documenti caricati (main thread)"""
+        self.debug_print(f"Creating UI for {len(loaded_docs)} documents...")
+        
+        for doc_data in loaded_docs:
+            try:
+                # Crea gruppo documento
+                group = DocumentGroup(self.content_frame, doc_data['name'], self, doc_data['index'])
+                group.document_loader = doc_data['loader']
+                group.json_path = doc_data['json_path']
+                group.doc_metadata = doc_data['metadata']
+                
+                # Aggiungi pagine con placeholder
+                for page_num in range(1, min(doc_data['loader'].totalpages + 1, 51)):
+                    group.add_page_lazy(page_num, doc_data['loader'])
+                
+                group.pack(pady=5, fill='x', padx=5)
+                self.documentgroups.append(group)
+                
+                # Update UI ogni 2 documenti
+                if doc_data['index'] % 2 == 0:
+                    self.update_idletasks()
+                
+            except Exception as e:
+                self.debug_print(f"Error creating group for {doc_data['name']}: {e}")
+        
+        # Finito!
+        self.after_idle(self.update_scroll_region)
+        
+        if hasattr(self, 'progress_toolbar'):
+            self.progress_status_label.config(text="✅ Caricamento completato!")
+            self.after(2000, lambda: self.progress_toolbar.pack_forget())
+        
+        self.debug_print(f"✅ All {len(loaded_docs)} documents loaded")
+        
+        # Auto-seleziona primo documento
+        if self.documentgroups:
+            self.after(200, lambda: self.select_document_group(self.documentgroups[0]))
+        
+        # Avvia caricamento thumbnail visibili
+        self.after(500, self.load_visible_thumbnails_progressive)
+
+    def select_document_group(self, group: DocumentGroup):
+        """Select document group - carica on-demand se necessario"""
+        if self.selected_thumbnail:
+            self.selected_thumbnail.deselect()
+            self.selected_thumbnail = None
+        if self.selected_group:
+            self.selected_group.deselect_group()
             
-            # Load document
-            self.load_document(doc_path)
+        self.selected_group = group
+        group.select_group()
+        
+        self.category_var.set(group.categoryname)
+        self.selection_info.config(text=f"Selezionato: Documento")
+        
+        # ✅ CARICA METADATI IMMEDIATAMENTE
+        if hasattr(self, 'document_metadata_cache') and group.document_counter in self.document_metadata_cache:
+            doc_metadata = self.document_metadata_cache[group.document_counter]
+            self.load_metadata_from_json(doc_metadata)
+            self.current_document_name = group.categoryname
+            self.update_idletasks()  # Forza update
+            self.debug_print(f"✅ Loaded metadata for: {group.categoryname}")
+        
+        # ✅ CARICA DOCUMENTO ON-DEMAND se non ancora caricato
+        if group.document_loader is None and hasattr(group, 'pdf_path'):
+            self.debug_print(f"Loading document on-demand: {group.categoryname}")
             
-            # Determine workflow and build UI
-            workflow_type = doc_dict['workflow_type']
+            try:
+                # Mostra messaggio
+                self.selection_info.config(text=f"Caricamento: {group.categoryname}...")
+                self.update_idletasks()
+                
+                # Carica PDF
+                documentloader = create_document_loader(group.pdf_path)
+                documentloader.load()
+                group.document_loader = documentloader
+                
+                # Aggiungi pagine
+                for page_num in range(1, min(documentloader.totalpages + 1, 51)):
+                    group.add_page_lazy(page_num, documentloader)
+                
+                self.update_idletasks()
+                self.debug_print(f"✅ Document loaded on-demand: {documentloader.totalpages} pages")
+                
+            except Exception as e:
+                self.debug_print(f"Error loading document on-demand: {e}")
+                messagebox.showerror("Errore", f"Impossibile caricare documento:\n{str(e)}")
+                return
+        
+        # Aggiorna info
+        page_count = len(group.pages) if group.pages else "caricamento..."
+        self.page_info_label.config(text=f"Documento: {group.categoryname} ({page_count} pagine)")
+        
+        # Carica thumbnail se già caricato
+        if group.document_loader:
+            def load_selected_thumbnails():
+                loaded = 0
+                for thumb in group.thumbnails[:10]:  # Prime 10 pagine
+                    if not thumb.image_loaded and thumb.document_loader:
+                        try:
+                            img = thumb.document_loader.get_page(thumb.pagenum)
+                            if img:
+                                thumb.set_image(img)
+                                loaded += 1
+                                # Update UI ogni 2 thumbnail
+                                if loaded % 2 == 0:
+                                    self.update_idletasks()
+                        except Exception as e:
+                            self.debug_print(f"Error loading thumbnail: {e}")
+                
+                if loaded > 0:
+                    self.debug_print(f"✅ Loaded {loaded} thumbnails for selected document")
             
-            if workflow_type == 'split_categorie':
-                # Split categorie workflow
-                categories = json_data.get('categories', [])
-                self.all_categories = set(
-                    cat['categoria'] for cat in categories 
-                    if cat['categoria'] != "Pagina vuota"
-                )
-                self.update_category_combo()
-                self.build_document_groups(categories)
-                self.debug_print(f"Batch load: SPLIT - {len(categories)} categories")
-            else:
-                # Metadati semplici workflow
-                self.all_categories = set()
-                self.update_category_combo()
-                self.build_single_document()
-                self.debug_print(f"Batch load: SINGLE DOCUMENT - {self.documentloader.totalpages} pages")
-            
-            # Update window title
-            self.title(f"DynamicAI - {self.current_document_name} [BATCH]")
-            
-            # ⭐ NUOVO: Auto-carica prima immagine
-            self.after(100, self.auto_load_first_image)
-            
-            self.debug_print(f"Document loaded from batch: {doc_path}")
-            
-        except Exception as e:
-            raise Exception(f"Errore caricamento documento da batch: {str(e)}")
+            # Carica in background
+            self.after(50, load_selected_thumbnails)
         
     def auto_load_first_image(self):
         """Auto-carica la prima immagine disponibile"""
@@ -1392,28 +1680,34 @@ class AIDOXAApp(tk.Tk):
         if self.updating_ui:
             return
         self.updating_ui = True
-
-        # Clear existing groups
+        
+        # ✅ FIX: Usa self.documentgroups invece di self.document_groups
         for group in self.documentgroups:
             group.destroy()
         self.documentgroups.clear()
-
+        
+        # ✅ CONTROLLO SICUREZZA: Verifica che documentloader esista
+        if not hasattr(self, 'documentloader') or not self.documentloader:
+            self.debug_print("WARNING: documentloader not available, skipping build_single_document")
+            self.updating_ui = False
+            return
+        
         # Crea documento unico
         document_name = self.input_folder_name or "Documento"
         group = DocumentGroup(self.content_frame, document_name, self, 1)
-
-        # ⭐ NUOVO: Lazy loading (VELOCE!)
-        for pagenum in range(1, self.documentloader.totalpages + 1):
-            group.add_page_lazy(pagenum, self.documentloader)  # ✅ VELOCE!
-
-        group.pack(pady=5, fill="x", padx=5)
+        
+        # VELOCE! Lazy loading
+        for page_num in range(1, self.documentloader.totalpages + 1):
+            group.add_page_lazy(page_num, self.documentloader)
+            
+        group.pack(pady=5, fill='x', padx=5)
         self.documentgroups.append(group)
-
+        
         self.after_idle(self.update_scroll_region)
         self.updating_ui = False
         self.debug_print(f"Created single document with {self.documentloader.totalpages} pages")
         
-        # ⭐ NUOVO: Pre-carica prime thumbnail
+        # Auto-carica prime thumbnail
         self.after(10, lambda: self.preload_thumbnails_progressive())
 
     def update_scroll_region(self):
@@ -1485,6 +1779,62 @@ class AIDOXAApp(tk.Tk):
             self.after(100, self.preload_thumbnails_progressive)
         else:
             self.debug_print("🎯 Lazy loading completato per viewport corrente")
+    
+    def load_visible_thumbnails_progressive(self):
+        """Carica progressivamente le thumbnail visibili nel viewport"""
+        if not hasattr(self, 'documentgroups') or not self.documentgroups:
+            return
+        
+        try:
+            # Ottieni area visibile del canvas
+            canvas_top = self.canvas.canvasy(0)
+            canvas_bottom = self.canvas.canvasy(self.canvas.winfo_height())
+            
+            # Raccogli thumbnail visibili non caricate
+            visible_thumbnails = []
+            for group in self.documentgroups:
+                # Controlla se il gruppo è visibile
+                try:
+                    group_y = group.frame.winfo_y()
+                    group_height = group.frame.winfo_height()
+                    
+                    # Se gruppo è nel viewport
+                    if group_y < canvas_bottom and (group_y + group_height) > canvas_top:
+                        # Aggiungi thumbnail del gruppo
+                        for thumb in group.thumbnails:
+                            if not thumb.image_loaded and thumb.document_loader:
+                                visible_thumbnails.append(thumb)
+                except:
+                    pass
+            
+            if not visible_thumbnails:
+                self.debug_print("No visible thumbnails to load")
+                return
+            
+            # Carica prime 5 thumbnail visibili
+            loaded = 0
+            for thumb in visible_thumbnails[:5]:
+                try:
+                    img = thumb.document_loader.get_page(thumb.pagenum)
+                    if img:
+                        thumb.set_image(img)
+                        loaded += 1
+                        self.debug_print(f"Loaded visible thumbnail: page {thumb.pagenum}")
+                        
+                        # Update UI ogni 2 thumbnail
+                        if loaded % 2 == 0:
+                            self.update_idletasks()
+                except Exception as e:
+                    self.debug_print(f"Error loading visible thumbnail: {e}")
+            
+            # Se ci sono altre thumbnail da caricare, continua
+            if len(visible_thumbnails) > 5:
+                self.after(300, self.load_visible_thumbnails_progressive)
+            else:
+                self.debug_print("✅ All visible thumbnails loaded")
+                
+        except Exception as e:
+            self.debug_print(f"Error in progressive thumbnail loading: {e}")
     
     def setup_viewport_loading(self):
         """Setup caricamento intelligente basato su scroll"""
@@ -2181,6 +2531,16 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         """Select a thumbnail and display its image"""
         self.debug_print(f"select_thumbnail called for page {thumbnail.pagenum}")
         
+        # ✅ CARICA IMMAGINE ON-DEMAND se non ancora caricata
+        if not thumbnail.image_loaded and thumbnail.document_loader:
+            try:
+                img = thumbnail.document_loader.get_page(thumbnail.pagenum)
+                if img:
+                    thumbnail.set_image(img)
+                    self.debug_print(f"On-demand loaded image for page {thumbnail.pagenum}")
+            except Exception as e:
+                self.debug_print(f"Error loading image on-demand: {e}")
+        
         # Deseleziona precedenti
         if self.selected_thumbnail:
             try:
@@ -2201,17 +2561,22 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         thumbnail.select()
         self.selected_group.select_group()
         
-        # Carica e mostra immagine
-        self.debug_print(f"About to display image for page {thumbnail.pagenum}")
+        # ✅ CARICA METADATI IMMEDIATAMENTE (priorità massima)
+        if hasattr(self, 'document_metadata_cache') and self.selected_group.document_counter in self.document_metadata_cache:
+            doc_metadata = self.document_metadata_cache[self.selected_group.document_counter]
+            self.load_metadata_from_json(doc_metadata)
+            self.current_document_name = self.selected_group.categoryname
+            self.update_idletasks()  # Forza aggiornamento UI
+            self.debug_print(f"✅ Loaded metadata for document: {self.selected_group.categoryname}")
         
+        # Mostra immagine
         try:
             if thumbnail.image:
                 self.display_image(thumbnail.image)
-                self.debug_print(f"Image displayed successfully for page {thumbnail.pagenum}")
+                self.debug_print(f"Image displayed for page {thumbnail.pagenum}")
             else:
-                self.debug_print(f"No image found for page {thumbnail.pagenum}")
+                self.debug_print(f"No image for page {thumbnail.pagenum}")
         except Exception as e:
-            print(f"[ERROR] Failed to display image: {e}")
             self.debug_print(f"Error displaying image: {e}")
         
         # Aggiorna UI
@@ -2220,7 +2585,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.page_info_label.config(text=f"Documento: {thumbnail.categoryname}")
         
     def select_document_group(self, group: DocumentGroup):
-        """Select an entire document group"""
+        """Select an entire document group and update metadata"""
         if self.selected_thumbnail:
             self.selected_thumbnail.deselect()
             self.selected_thumbnail = None
@@ -2233,6 +2598,24 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.category_var.set(group.categoryname)
         self.selection_info.config(text=f"Selezionato: Documento")
         self.page_info_label.config(text=f"Documento: {group.categoryname} ({len(group.pages)} pagine)")
+        
+        # Carica metadati specifici del documento selezionato
+        if hasattr(self, 'document_metadata_cache') and group.document_counter in self.document_metadata_cache:
+            doc_metadata = self.document_metadata_cache[group.document_counter]
+            self.load_metadata_from_json(doc_metadata)
+            self.current_document_name = group.categoryname
+            self.debug_print(f"Loaded metadata for document: {group.categoryname}")
+        
+        # Carica thumbnail del documento selezionato se non caricate
+        for thumb in group.thumbnails[:5]:  # Prime 5 pagine
+            if not thumb.image_loaded and thumb.document_loader:
+                try:
+                    img = thumb.document_loader.get_page(thumb.pagenum)
+                    if img:
+                        thumb.set_image(img)
+                        self.debug_print(f"Loaded thumbnail on selection: page {thumb.pagenum}")
+                except Exception as e:
+                    self.debug_print(f"Error loading thumbnail on selection: {e}")
 
     def display_image(self, image: Image.Image):
         """Display image in center panel"""

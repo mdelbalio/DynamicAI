@@ -134,10 +134,27 @@ class DocumentGroup:
         self.label.configure(bg="#d0d0d0", relief="flat", bd=1)
         self.frame.configure(bg="#f0f0f0")
 
-    def add_page(self, pagenum: int, image: Image.Image, position: Optional[int] = None) -> PageThumbnail:
-        """Add a page to this document group"""
-        thumbnail = PageThumbnail(self.pages_frame, pagenum, image, self.categoryname, self.mainapp, self)
+    def add_page_lazy(self, pagenum: int, document_loader, position: Optional[int] = None) -> PageThumbnail:
+        """Aggiungi pagina con lazy loading - carica solo quando necessario
         
+        Args:
+            pagenum: Numero pagina
+            document_loader: Loader del documento per caricare immagine
+            position: Posizione di inserimento (opzionale)
+        
+        Returns:
+            PageThumbnail creato
+        """
+        # Crea thumbnail SENZA immagine (placeholder)
+        thumbnail = PageThumbnail(
+            self.pages_frame, pagenum, None,
+            self.categoryname, self.mainapp, self
+        )
+        
+        # Imposta il document_loader SUBITO
+        thumbnail.document_loader = document_loader
+        
+        # Aggiungi alla lista
         if position is None:
             self.thumbnails.append(thumbnail)
             if pagenum not in self.pages:
@@ -147,7 +164,51 @@ class DocumentGroup:
             if pagenum not in self.pages:
                 self.pages.insert(position, pagenum)
         
+        # Repack grid
         self.repack_thumbnails_grid()
+        
+        # NON caricare automaticamente - solo placeholder
+        # Il caricamento avviene:
+        # 1. Quando diventa visibile (load_visible_thumbnails_progressive)
+        # 2. Quando viene selezionato (select_thumbnail)
+        # 3. Quando si seleziona il documento (select_document_group)
+        
+        return thumbnail
+
+    def add_page(self, pagenum: int, image: Image.Image, position: Optional[int] = None) -> PageThumbnail:
+        """Add a page to this document group with immediate image loading (for drag&drop)
+        
+        Args:
+            pagenum: Page number
+            image: PIL Image (already loaded)
+            position: Optional position to insert
+        
+        Returns:
+            PageThumbnail created
+        """
+        # Crea thumbnail CON immagine (per drag&drop)
+        thumbnail = PageThumbnail(
+            self.pages_frame, pagenum, image,
+            self.categoryname, self.mainapp, self
+        )
+        
+        # Se c'è un document_loader nel gruppo, assegnalo
+        if hasattr(self, 'document_loader') and self.document_loader:
+            thumbnail.document_loader = self.document_loader
+        
+        # Aggiungi alla lista
+        if position is None:
+            self.thumbnails.append(thumbnail)
+            if pagenum not in self.pages:
+                self.pages.append(pagenum)
+        else:
+            self.thumbnails.insert(position, thumbnail)
+            if pagenum not in self.pages:
+                self.pages.insert(position, pagenum)
+        
+        # Repack grid
+        self.repack_thumbnails_grid()
+        
         return thumbnail
 
     def add_page_lazy(self, pagenum: int, document_loader, position: Optional[int] = None) -> PageThumbnail:

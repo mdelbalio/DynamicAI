@@ -80,11 +80,11 @@ class ExportManager:
         """Export documents to configured format."""
         # NUOVA: Inizializza sessione export con contatori
         self.current_export_session += 1
-        numbering_mode = self.config_manager.config_data.get('document_numbering', {}).get('numbering_mode', 'per_category')
+        numbering_mode = self.config_manager.get('document_numbering', {}).get('numbering_mode', 'per_category')
         self.document_counters = get_document_counter_manager(self.config_manager, numbering_mode)
 
         # Debug info
-        if self.config_manager.config_data.get('show_debug_info', False):
+        if self.config_manager.get('show_debug_info', False):
             print(f"[DEBUG] Export session {self.current_export_session} - Numbering mode: {numbering_mode}")
 
         export_format = self.config_manager.get('export_format', 'JPEG')
@@ -141,13 +141,13 @@ class ExportManager:
                 if progress_callback:
                     progress_callback(f"Esportando pagina {page_counter}/{total_pages}")
 
-                counter = self._get_next_counter(group.category_name)
+                counter = self._get_next_counter(group.categoryname)
                 numbered_filename = generate_numbered_filename(
                     base_name=document_name,
                     counter=counter,
                     config_manager=self.config_manager,
                     is_multi_document=True,
-                    category_name=group.category_name
+                    category_name=group.categoryname
                 )
 
                 filename = f"{numbered_filename}.jpg"
@@ -180,13 +180,13 @@ class ExportManager:
             if progress_callback:
                 progress_callback(f"Esportando documento {idx}/{len(document_groups)}")
 
-            counter = self._get_next_counter(group.category_name)
+            counter = self._get_next_counter(group.categoryname)
             numbered_filename = generate_numbered_filename(
                 base_name=document_name,
                 counter=counter,
                 config_manager=self.config_manager,
                 is_multi_document=True,
-                category_name=group.category_name
+                category_name=group.categoryname
             )
 
             filename = f"{numbered_filename}.pdf"
@@ -219,13 +219,13 @@ class ExportManager:
                 if progress_callback:
                     progress_callback(f"Esportando pagina {page_counter}/{total_pages}")
 
-                counter = self._get_next_counter(group.category_name)
+                counter = self._get_next_counter(group.categoryname)
                 numbered_filename = generate_numbered_filename(
                     base_name=document_name,
                     counter=counter,
                     config_manager=self.config_manager,
                     is_multi_document=True,
-                    category_name=group.category_name
+                    category_name=group.categoryname
                 )
 
                 filename = f"{numbered_filename}.pdf"
@@ -260,13 +260,13 @@ class ExportManager:
                 if progress_callback:
                     progress_callback(f"Esportando pagina {page_counter}/{total_pages}")
 
-                counter = self._get_next_counter(group.category_name)
+                counter = self._get_next_counter(group.categoryname)
                 numbered_filename = generate_numbered_filename(
                     base_name=document_name,
                     counter=counter,
                     config_manager=self.config_manager,
                     is_multi_document=True,
-                    category_name=group.category_name
+                    category_name=group.categoryname
                 )
 
                 filename = f"{numbered_filename}.tiff"
@@ -300,13 +300,13 @@ class ExportManager:
             if progress_callback:
                 progress_callback(f"Esportando documento {idx}/{len(document_groups)}")
 
-            counter = self._get_next_counter(group.category_name)
+            counter = self._get_next_counter(group.categoryname)
             numbered_filename = generate_numbered_filename(
                 base_name=document_name,
                 counter=counter,
                 config_manager=self.config_manager,
                 is_multi_document=True,
-                category_name=group.category_name
+                category_name=group.categoryname
             )
 
             filename = f"{numbered_filename}.tiff"
@@ -710,13 +710,13 @@ class ExportManager:
         """
         Ottiene il prossimo numero contatore per la categoria
         """
-        numbering_mode = self.config_manager.config_data.get('document_numbering', {}).get('numbering_mode', 'per_category')
+        numbering_mode = self.config_manager.get('document_numbering', {}).get('numbering_mode', 'per_category')
 
         if numbering_mode == 'global':
             # Contatore globale
             key = '_global'
             if key not in self.document_counters:
-                self.document_counters[key] = self.config_manager.config_data.get('document_numbering', {}).get('start_number', 1)
+                self.document_counters[key] = self.config_manager.get('document_numbering', {}).get('start_number', 1)
 
             current = self.document_counters[key]
             self.document_counters[key] += 1
@@ -726,7 +726,7 @@ class ExportManager:
             # Contatore per categoria
             safe_category = category_name or 'Documento'
             if safe_category not in self.document_counters:
-                self.document_counters[safe_category] = self.config_manager.config_data.get('document_numbering', {}).get('start_number', 1)
+                self.document_counters[safe_category] = self.config_manager.get('document_numbering', {}).get('start_number', 1)
 
             current = self.document_counters[safe_category]
             self.document_counters[safe_category] += 1
