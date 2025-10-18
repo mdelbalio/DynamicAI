@@ -153,20 +153,22 @@ class DocumentGroup:
         self.frame.configure(bg="#f0f0f0")
 
     def add_page_lazy(self, pagenum: int, document_loader, position: Optional[int] = None) -> PageThumbnail:
-        """Aggiungi pagina con lazy loading - carica solo quando necessario
+        """Aggiungi pagina con lazy loading - carica immagine dopo creazione"""
         
-        Args:
-            pagenum: Numero pagina
-            document_loader: Loader del documento per caricare immagine
-            position: Posizione di inserimento (opzionale)
+        # ✅ Ottieni dimensioni thumbnail da config
+        thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+        thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
         
-        Returns:
-            PageThumbnail creato
-        """
-        # Crea thumbnail SENZA immagine (placeholder)
+        # ✅ Crea thumbnail SENZA immagine (placeholder) CON dimensioni corrette
         thumbnail = PageThumbnail(
-            self.pages_frame, pagenum, None,
-            self.categoryname, self.mainapp, self
+            self.pages_frame, 
+            pagenum, 
+            None,  # None = placeholder
+            self.categoryname, 
+            self.mainapp, 
+            self,
+            width=thumb_width,   # ✅ Passa larghezza
+            height=thumb_height  # ✅ Passa altezza
         )
         
         # Imposta il document_loader SUBITO
@@ -196,8 +198,43 @@ class DocumentGroup:
     def add_page(self, page_num: int, image: Image.Image, position: Optional[int] = None) -> PageThumbnail:
         """Add a page to this document group with immediate image loading for drag/drop"""
         
-        # Create thumbnail CON immagine per drag/drop
-        thumbnail = PageThumbnail(self.pages_frame, page_num, image, self.categoryname, self.mainapp, self)
+        # ✅ Ottieni dimensioni thumbnail da config
+        thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+        thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
+        
+        # ✅ Create thumbnail CON dimensioni corrette
+        thumbnail = PageThumbnail(
+            self.pages_frame, 
+            page_num, 
+            image, 
+            self.categoryname, 
+            self.mainapp, 
+            self,
+            width=thumb_width,   # ✅ Passa larghezza
+            height=thumb_height  # ✅ Passa altezza
+        )
+        
+        if hasattr(self, 'document_loader') and self.document_loader:
+            thumbnail.document_loader = self.document_loader
+        
+        # ✅ CONVERTI POSITION A INT per sicurezza
+        if position is not None:
+            try:
+                position = int(position)
+            except (ValueError, TypeError):
+                position = None
+        
+        if position is None:
+            self.thumbnails.append(thumbnail)
+            if page_num not in self.pages:
+                self.pages.append(page_num)
+        else:
+            self.thumbnails.insert(position, thumbnail)
+            if page_num not in self.pages:
+                self.pages.insert(position, page_num)
+        
+        self.repack_thumbnails_grid()
+        return thumbnail
         
         if hasattr(self, 'document_loader') and self.document_loader:
             thumbnail.document_loader = self.document_loader
@@ -223,20 +260,22 @@ class DocumentGroup:
         return thumbnail
 
     def add_page_lazy(self, pagenum: int, document_loader, position: Optional[int] = None) -> PageThumbnail:
-        """Aggiungi pagina con lazy loading - carica immagine dopo creazione
+        """Aggiungi pagina con lazy loading - carica immagine dopo creazione"""
         
-        Args:
-            pagenum: Numero pagina
-            document_loader: Loader del documento per caricare immagine
-            position: Posizione di inserimento (opzionale)
+        # ✅ Ottieni dimensioni thumbnail da config
+        thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+        thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
         
-        Returns:
-            PageThumbnail creato
-        """
-        # Crea thumbnail SENZA immagine (placeholder)
+        # ✅ Crea thumbnail SENZA immagine (placeholder) CON dimensioni corrette
         thumbnail = PageThumbnail(
-            self.pages_frame, pagenum, None,  # None = placeholder
-            self.categoryname, self.mainapp, self  # ✅ CORRETTO: self.categoryname
+            self.pages_frame, 
+            pagenum, 
+            None,  # None = placeholder
+            self.categoryname, 
+            self.mainapp, 
+            self,
+            width=thumb_width,   # ✅ Passa larghezza
+            height=thumb_height  # ✅ Passa altezza
         )
         
         # ⭐ IMPOSTA il document_loader SUBITO
@@ -273,6 +312,46 @@ class DocumentGroup:
                     self.mainapp.debug_print(f"❌ Failed to load image for page {thumbnail.pagenum}")
         except Exception as e:
             self.mainapp.debug_print(f"Error loading thumbnail image: {e}")   
+
+    def add_page_to_group(self, page_number: int, document_loader) -> bool:
+        """
+        Unified method to add pages to groups - works for both normal and batch mode
+        Returns True if successful, False otherwise
+        """
+        try:
+            # Generate page image
+            page_image = document_loader.get_page(page_number)
+            if not page_image:
+                return False
+                
+            # Create PageThumbnail using the SAME system as normal mode
+            from gui.thumbnail import PageThumbnail
+            
+            thumbnail = PageThumbnail(self.pages_frame, page_number, self.main_window, page_image)
+            
+            # Set document loader
+            if hasattr(thumbnail, 'set_document_loader'):
+                thumbnail.set_document_loader(document_loader)
+            elif hasattr(thumbnail, 'document_loader'):
+                thumbnail.document_loader = document_loader
+            
+            # Add to lists
+            if not hasattr(self, 'thumbnails'):
+                self.thumbnails = []
+            if not hasattr(self, 'pages'):
+                self.pages = []
+                
+            self.thumbnails.append(thumbnail)
+            self.pages.append(page_number)
+            
+            # Position in grid using existing system
+            self.repack_thumbnails_grid()
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error adding page {page_number} to group: {e}")
+            return False
 
     def remove_thumbnail(self, thumbnail: PageThumbnail) -> int:
         """Remove a thumbnail from this group"""

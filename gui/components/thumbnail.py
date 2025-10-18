@@ -15,7 +15,20 @@ class PageThumbnail:
     """Represents a page thumbnail with drag and drop capabilities and grid layout support"""
     
     def __init__(self, parent: tk.Widget, pagenum: int, image: Image.Image,
-                categoryname: str, mainapp: 'AIDOXAApp', document_group: 'DocumentGroup'):
+                categoryname: str, mainapp: 'AIDOXAApp', document_group: 'DocumentGroup',
+                width: Optional[int] = None, height: Optional[int] = None):
+        """Initialize page thumbnail with configurable size
+        
+        Args:
+            parent: Parent widget
+            pagenum: Page number
+            image: Page image (can be None for lazy loading)
+            categoryname: Category name
+            mainapp: Main application instance
+            document_group: Parent document group
+            width: Thumbnail width (optional, defaults to config)
+            height: Thumbnail height (optional, defaults to config)
+        """
         self.parent = parent
         self.pagenum = pagenum
         self.image = image  # Può essere None per lazy loading
@@ -27,14 +40,23 @@ class PageThumbnail:
         # ⭐ NUOVO: Lazy loading support
         self.document_loader = None  # Riferimento al loader per lazy loading
         self.image_loaded = False    # Flag per sapere se immagine è caricata
+        # ✅ NUOVO: Ottieni dimensioni da parametri o config
+        if width is None:
+            width = mainapp.config_manager.get('thumbnail_width', 80)
+        if height is None:
+            height = mainapp.config_manager.get('thumbnail_height', 100)
+
+        # Store thumbnail size
+        self.thumbnail_width = width
+        self.thumbnail_height = height
         
         # Variables for managing drag vs click
         self.is_dragging = False
         self.drag_start_pos: Optional[Tuple[int, int]] = None
         
-        # Get thumbnail size from config
-        thumb_width = mainapp.config_manager.get('thumbnail_width', 80)
-        thumb_height = mainapp.config_manager.get('thumbnail_height', 100)
+        # ✅ Usa dimensioni già impostate sopra
+        thumb_width = self.thumbnail_width
+        thumb_height = self.thumbnail_height
         
         # ⭐ NUOVO: Crea thumbnail o placeholder
         if image is None:

@@ -49,7 +49,8 @@ class AIDOXAApp(tk.Tk):
         self.setup_window()
         self.setup_ui()
         self.bind_events()
-        
+        self._closing = False
+                    
         # Restore window layout
         self.after(200, self.restore_window_layout)
 
@@ -1031,6 +1032,7 @@ class AIDOXAApp(tk.Tk):
 
     def on_closing(self):
         """Handle application closing"""
+        self._closing = True  # ✅ AGGIUNGI QUESTA RIGA
         self.debug_print("Application closing, saving configuration...")
         if self.config_manager.get('auto_save_changes', True):
             self.save_config()
@@ -1105,52 +1107,35 @@ class AIDOXAApp(tk.Tk):
 
     # ✅ AGGIUNGI QUESTO METODO QUI
     def check_groups_reflow_needed(self):
-        """Check periodicamente se serve reflow (ogni 500ms)"""
-        if hasattr(self, 'documentgroups') and self.documentgroups:
-            for idx, group in enumerate(self.documentgroups):
+        """Check if document groups need reflow based on size changes - BATCH SAFE"""
+        try:
+            # ✅ BLOCCA il reflow se siamo in batch mode
+            if hasattr(self, 'disable_reflow_for_batch') and self.disable_reflow_for_batch:
+                return
+                
+            # ✅ BLOCCA il reflow se siamo in workflow batch
+            if hasattr(self, 'workflow_manager') and self.workflow_manager.is_batch_mode():
+                return
+                
+            if not hasattr(self, 'document_groups'):
+                return
+                
+            # Original reflow logic for normal mode only
+            for group in self.document_groups:
                 try:
                     frame_width = group.pages_frame.winfo_width()
-                    
-                    # ✅ DEBUG: Stampa larghezza frame
-                    if idx == 0:  # Solo primo gruppo per non spammare
-                        if self.config_manager.get('debug_reflow', False):
-                            print(f"[REFLOW] Group 0: width={frame_width}px, per_row={group.thumbnails_per_row}")
-                    
-                    # ✅ Inizializza last_calculated_width se non esiste
-                    if not hasattr(group, 'last_calculated_width'):
-                        group.last_calculated_width = frame_width
-                        if self.config_manager.get('debug_reflow', False):
-                            print(f"[REFLOW] Initialized last_width for group {idx}: {frame_width}px")
-                        continue
-                    
-                    # Se larghezza cambiata significativamente
-                    width_change = abs(frame_width - group.last_calculated_width)
-                    
-                    # ✅ DEBUG: Stampa cambio larghezza
-                    if width_change > 20 and idx == 0:
-                        if self.config_manager.get('debug_reflow', False):
-                            print(f"[REFLOW] Width changed: {group.last_calculated_width}px -> {frame_width}px (change: {width_change}px)")
-                    
-                    if width_change > 20 and frame_width > 10:
+                    if frame_width > 10:
                         new_per_row = group.calculate_optimal_thumbnails_per_row()
-                        
-                        # ✅ DEBUG: Stampa nuovo per_row
-                        if self.config_manager.get('debug_reflow', False):
-                            print(f"[REFLOW] Group {idx}: {group.thumbnails_per_row} -> {new_per_row} per row")
-                        
                         if new_per_row != group.thumbnails_per_row:
                             group.thumbnails_per_row = new_per_row
                             group.last_calculated_width = frame_width
                             group.repack_thumbnails_grid()
-                            self.debug_print(f"✅ Auto-reflow: {new_per_row} per row (width: {frame_width}px)")
-                
+                            self.debug_print(f"Reflow triggered: {new_per_row} per row, width: {frame_width}px")
                 except Exception as e:
-                    print(f"[REFLOW ERROR] {e}")
-                    import traceback
-                    traceback.print_exc()
-        
-        # Re-schedule check
-        self.after(500, self.check_groups_reflow_needed)
+                    self.debug_print(f"Error in group reflow: {e}")
+        except Exception as e:
+            self.debug_print(f"Error in check_groups_reflow_needed: {e}")
+
     
     def trigger_all_groups_reflow(self):
         """Trigger reflow su tutti i document groups"""
@@ -1493,7 +1478,8 @@ class AIDOXAApp(tk.Tk):
             self.build_document_groups(categories)
             self.debug_print(f"Mode: SPLIT - {len(categories)} categories, {len(self.documentgroups)} documents")
             
-            self.after(100, self.auto_load_first_image)
+            # ❌ BATCH: Disabled auto-load for better thumbnail sizing
+            # self.after(100, self.auto_load_first_image)
         
         except Exception as e:
             messagebox.showerror("Errore", f"Errore nel caricamento: {str(e)}")
@@ -1603,13 +1589,6 @@ class AIDOXAApp(tk.Tk):
         self.after(300, lambda: load_document_progressive(0))
 
     def load_document_from_batch(self, doc_dict: dict):
-        """
-        Load document from batch processing - accepts dictionary from batch database
-        
-        Args:
-            doc_dict: Dictionary containing document info from batch database
-        """
-    def load_document_from_batch(self, doc_dict: dict):
         """Load document from batch processing with workflow management"""
         try:
             # ✅ SET BATCH MODE
@@ -1641,7 +1620,7 @@ class AIDOXAApp(tk.Tk):
             
             # Test loading first page
             try:
-                test_image = self.document_loader.get_page(0)
+                test_image = self.document_loader.get_page(1)  # ✅ CORRETTO - PDF pages start at 1
                 if test_image:
                     self.debug_print(f"[BATCH] Test: Successfully loaded page 1, size: {test_image.size}")
                 else:
@@ -1683,6 +1662,10 @@ class AIDOXAApp(tk.Tk):
             self.build_single_document()
             
             self.debug_print("[BATCH] Document loaded successfully")
+            # ✅ NUOVO: Auto-carica prima immagine
+            self.after(100, self.auto_load_first_image)
+
+            self.debug_print("[BATCH] Document loaded successfully")
             return True
             
         except Exception as e:
@@ -1710,8 +1693,9 @@ class AIDOXAApp(tk.Tk):
             raise
 
     def build_document_groups_from_categories(self, json_categories):
-        """Build document groups - ONLY if workflow allows it"""
-        # ✅ CHECK WORKFLOW PERMISSIONS
+        """Build document groups - ONLY if workflow allows it - FIXED VERSION"""
+        
+        # CHECK WORKFLOW PERMISSIONS
         if not self.workflow_manager.can_load_thumbnails():
             self.debug_print(f"[CATEGORIES] Skipped building groups - Current mode: {self.workflow_manager.current_interface.value}")
             return
@@ -1719,47 +1703,146 @@ class AIDOXAApp(tk.Tk):
         if not json_categories:
             self.debug_print("[CATEGORIES] No categories data to process")
             return
-            
+        
         try:
             self.debug_print(f"[CATEGORIES] Building groups for {len(json_categories)} categories in {self.workflow_manager.current_interface.value} mode")
             
-            # Get categories and sync with database
-            category_names = self.sync_categories_from_batch(json_categories)
-            self.debug_print(f"Synced {len(category_names)} categories from batch")
+            # ✅ FIXED: Leggi dimensioni dalle impostazioni correttamente
+            thumb_width = 80  # Default
+            thumb_height = 100  # Default
             
-            # Update workflow manager
-            self.workflow_manager.loaded_categories = json_categories
-            self.workflow_manager.categories_present = True
-            
-            # Update category combobox
-            self.update_category_combobox(category_names)
+            try:
+                if hasattr(self.config_manager, 'get_setting'):
+                    thumb_width = self.config_manager.get_setting('thumbnail_width', 80)
+                    thumb_height = self.config_manager.get_setting('thumbnail_height', 100)
+                elif hasattr(self.config_manager, 'config'):
+                    thumb_width = self.config_manager.config.get('thumbnail_width', 80)
+                    thumb_height = self.config_manager.config.get('thumbnail_height', 100)
+            except:
+                pass
+                
+            self.debug_print(f"[CATEGORIES] Using thumbnail size: {thumb_width}x{thumb_height}")
             
             # Clear existing groups
-            self.clear_document_groups()
+            try:
+                if self.document_groups:
+                    self.debug_print(f"[CATEGORIES] Clearing {len(self.document_groups)} existing groups")
+                    for group in self.document_groups:
+                        try:
+                            if hasattr(group, 'destroy'):
+                                group.destroy()
+                        except Exception as e:
+                            self.debug_print(f"Error destroying group: {e}")
+                    self.document_groups.clear()
+            except Exception as e:
+                self.debug_print(f"Error clearing groups: {e}")
+                
+            # FIXED CATEGORY EXTRACTION
+            category_names = []
+            self.debug_print(f"[CATEGORIES] Processing {len(json_categories)} category items")
             
-            # Create document groups with multi-row grid layout
-            self.document_groups = []
+            for i, category_data in enumerate(json_categories):
+                if isinstance(category_data, dict):
+                    category_name = None
+                    for key in ['categoria', 'name', 'category']:
+                        if key in category_data:
+                            category_name = str(category_data[key]).strip()
+                            break
+                    if category_name and category_name not in category_names:
+                        category_names.append(category_name)
+                        self.debug_print(f"[CATEGORIES] Added from dict: '{category_name}'")
+                elif isinstance(category_data, str):
+                    category_name = category_data.strip()
+                    if category_name and category_name not in category_names:
+                        category_names.append(category_name)
+                        self.debug_print(f"[CATEGORIES] Added from string: '{category_name}'")
+                        
+            self.debug_print(f"[CATEGORIES] Final extracted categories: {category_names}")
+            
+            # Update category combobox
+            self.update_category_combobox()
+            
+            # INITIALIZE document_groups if not exists
+            if not hasattr(self, 'document_groups'):
+                self.document_groups = []
+            
+            # Create groups and populate with pages
             for i, category_name in enumerate(category_names):
-                group = DocumentGroup(
-                    self.document_scroll_frame,
-                    category_name,
-                    self,
-                    i + 1
-                )
-                group.set_document_loader(self.document_loader)
-                self.document_groups.append(group)
+                try:
+                    self.debug_print(f"[CATEGORIES] Creating group {i+1}: {category_name}")
+                    
+                    # Create group
+                    from gui.document_group import DocumentGroup
+                    parent_frame = getattr(self, 'content_frame', self)
+                    group = DocumentGroup(parent_frame, category_name, self, i + 1)
+                    
+                    # Assign document loader if possible
+                    if hasattr(self, 'document_loader') and self.document_loader:
+                        try:
+                            group.document_loader = self.document_loader
+                            self.debug_print(f"[CATEGORIES] Document loader assigned to group: {category_name}")
+                        except:
+                            pass
+                    
+                    # CRITICAL - Find and add pages to this category
+                    category_pages = []
+                    for category_data in json_categories:
+                        if isinstance(category_data, dict) and category_data.get('categoria') == category_name:
+                            start_page = category_data.get('inizio', 1)
+                            end_page = category_data.get('fine', start_page)
+                            for page_num in range(start_page, end_page + 1):
+                                if page_num not in category_pages:
+                                    category_pages.append(page_num)
+                    
+                    self.debug_print(f"[CATEGORIES] Category '{category_name}' pages: {category_pages}")
+                    
+                    # ✅ UNIFIED THUMBNAIL SYSTEM - USE SAME CODE AS NORMAL MODE
+                    if category_pages and hasattr(self, 'document_loader') and self.document_loader:
+                        try:
+                            # Use the SAME system as normal loading!
+                            for page_num in category_pages:
+                                success = group.add_page_to_group(page_num, self.document_loader)
+                                if success:
+                                    self.debug_print(f"[CATEGORIES] ✅ Added page {page_num} ({thumb_width}x{thumb_height}) to {category_name}")
+                                else:
+                                    self.debug_print(f"[CATEGORIES] ❌ Failed to add page {page_num} to {category_name}")
+                                    
+                            self.debug_print(f"[CATEGORIES] Added {len(category_pages)} pages to group: {category_name}")
+                        except Exception as e:
+                            self.debug_print(f"[CATEGORIES] Error adding pages to {category_name}: {e}")
+                    
+                    self.document_groups.append(group)
+                    
+                except Exception as e:
+                    self.debug_print(f"[CATEGORIES] Error creating group {category_name}: {e}")
+                    continue
             
-            # Grid layout for document groups
-            self.update_document_groups_layout()
+            # Manual layout update
+            try:
+                for i, group in enumerate(self.document_groups):
+                    try:
+                        group.frame.grid(row=i, column=0, sticky='ew', padx=5, pady=2)
+                        parent_frame.grid_columnconfigure(0, weight=1)
+                    except Exception as e:
+                        self.debug_print(f"Error positioning group {i}: {e}")
+                self.debug_print(f"[CATEGORIES] ✅ Positioned {len(self.document_groups)} document groups in grid")
+            except Exception as e:
+                self.debug_print(f"Error in manual grid layout: {e}")
             
-            self.debug_print(f"Created {len(self.document_groups)} document groups with grid layout")
+            # ✅ FORCE thumbnail generation
+            try:
+                total_thumbnails = 0
+                for group in self.document_groups:
+                    if hasattr(group, 'thumbnails'):
+                        total_thumbnails += len(group.thumbnails)
+                self.debug_print(f"[CATEGORIES] ✅ Built {len(self.document_groups)} groups with {total_thumbnails} total thumbnails")
+                
+            except Exception as e:
+                self.debug_print(f"Error counting thumbnails: {e}")
             
-            # ✅ SAFE thumbnail loading per workflow
-            self._safe_build_thumbnail_groups(json_categories)
-            
-            # Ensure category combobox is populated
-            if hasattr(self, 'category_combobox'):
-                self.update_category_combobox(category_names)
+            # Schedule auto-load first image
+            self.debug_print("[CATEGORIES] Scheduling auto-load first image...")
+            self.after(100, self.auto_load_first_image)
             
         except Exception as e:
             self.debug_print(f"[CATEGORIES] Error building document groups: {e}")
@@ -1825,7 +1908,7 @@ class AIDOXAApp(tk.Tk):
             self.debug_print(f"[METADATA] Loading {len(header)} metadata fields in {self.workflow_manager.current_interface.value} mode")
             
             # ✅ SAFE metadata loading per modalità
-            self._safe_load_metadata_fields(header)
+            self.safe_load_metadata_fields(header)
             
             self.debug_print("[METADATA] Successfully loaded metadata fields")
             
@@ -1834,32 +1917,91 @@ class AIDOXAApp(tk.Tk):
             import traceback
             self.debug_print(f"[METADATA] Full traceback: {traceback.format_exc()}")
 
-    def _safe_load_metadata_fields(self, header: dict):
-        """Safely load metadata into interface fields"""
+    def safe_load_metadata_fields(self, header: dict):
+        """Safely load metadata into interface fields - FIXED VERSION
+        
+        This method updates the metadata entry widgets in the right panel
+        with values from the provided header dictionary.
+        
+        Args:
+            header: Dictionary with metadata field names and values
+        """
         try:
-            # Try to find and populate metadata fields
-            metadata_mapping = {
-                'NumeroProgetto': ['numero_progetto_entry', 'project_number_entry', 'number_entry'],
-                'Intestatario': ['intestatario_entry', 'owner_entry', 'titolare_entry'], 
-                'IndirizzoImmobile': ['indirizzo_immobile_entry', 'address_entry', 'indirizzo_entry'],
-                'LavoroEseguito': ['lavoro_eseguito_text', 'work_done_text', 'lavori_text', 'work_text'],
-                'EstremiCatastali': ['estremi_catastali_entry', 'cadastral_entry', 'catasto_entry']
-            }
-            
             fields_updated = 0
-            for key, possible_names in metadata_mapping.items():
-                if key in header:
-                    value = str(header[key])
-                    if self._try_update_field(possible_names, value):
-                        fields_updated += 1
-                        self.debug_print(f"[METADATA] ✅ Updated {key}: {value[:50]}...")
+            
+            # ✅ VERIFICA che metadata_entries esista
+            if not hasattr(self, 'metadata_entries') or not self.metadata_entries:
+                self.debug_print("[METADATA] ⚠️ metadata_entries not initialized")
+                # ✅ Prova a inizializzare se possibile
+                if hasattr(self, 'header_metadata') and self.header_metadata:
+                    self.debug_print("[METADATA] Attempting to rebuild metadata UI...")
+                    if hasattr(self, 'scrollable_metadata_frame'):
+                        self.populate_metadata_fields(self.scrollable_metadata_frame)
                     else:
-                        self.debug_print(f"[METADATA] ⚠️ Field not found for {key}")
+                        self.debug_print("[METADATA] ❌ Cannot rebuild - scrollable_metadata_frame missing")
+                        return
+                else:
+                    return
+            
+            # ✅ AGGIORNA DIRETTAMENTE GLI ENTRY WIDGET
+            for field_name, value in header.items():
+                if field_name in self.metadata_entries:
+                    try:
+                        entry_widget = self.metadata_entries[field_name]
+                        
+                        # Verifica che il widget esista ancora
+                        if not entry_widget.winfo_exists():
+                            self.debug_print(f"[METADATA] ⚠️ Widget for {field_name} no longer exists")
+                            continue
+                        
+                        # Clear and insert new value
+                        if hasattr(entry_widget, 'delete') and hasattr(entry_widget, 'insert'):
+                            entry_widget.delete(0, tk.END)
+                            entry_widget.insert(0, str(value) if value is not None else '')
+                            fields_updated += 1
+                            
+                            # ✅ AGGIORNA ANCHE header_metadata
+                            if hasattr(self, 'header_metadata'):
+                                self.header_metadata[field_name] = str(value) if value is not None else ''
+                            
+                            self.debug_print(f"[METADATA] ✅ Updated {field_name}: {str(value)[:50]}...")
+                        else:
+                            self.debug_print(f"[METADATA] ⚠️ Widget {field_name} has no delete/insert methods")
+                            
+                    except tk.TclError as e:
+                        self.debug_print(f"[METADATA] TclError updating {field_name}: {e}")
+                    except Exception as e:
+                        self.debug_print(f"[METADATA] Error updating {field_name}: {e}")
+                else:
+                    self.debug_print(f"[METADATA] ⚠️ Field '{field_name}' not in metadata_entries")
+                    
+                    # ✅ CREA CAMPO SE NON ESISTE (dynamic metadata support)
+                    if hasattr(self, 'header_metadata'):
+                        self.header_metadata[field_name] = str(value) if value is not None else ''
+                        self.debug_print(f"[METADATA] Added new field to header_metadata: {field_name}")
+            
+            # ✅ FORZA UPDATE UI
+            if fields_updated > 0:
+                try:
+                    self.update_idletasks()
+                except:
+                    pass
             
             self.debug_print(f"[METADATA] Successfully updated {fields_updated}/{len(header)} fields")
             
+            # ✅ Se alcuni campi non sono stati trovati, ricostruisci UI
+            if fields_updated < len(header) and hasattr(self, 'scrollable_metadata_frame'):
+                self.debug_print(f"[METADATA] Rebuilding UI for {len(header) - fields_updated} missing fields...")
+                try:
+                    self.populate_metadata_fields(self.scrollable_metadata_frame)
+                    self.debug_print("[METADATA] ✅ UI rebuilt successfully")
+                except Exception as e:
+                    self.debug_print(f"[METADATA] Error rebuilding UI: {e}")
+            
         except Exception as e:
-            self.debug_print(f"[METADATA] Error in safe loading: {e}")
+            self.debug_print(f"[METADATA] Critical error in safe loading: {e}")
+            import traceback
+            self.debug_print(f"[METADATA] Full traceback: {traceback.format_exc()}")
 
     def _try_update_field(self, field_names: list, value: str) -> bool:
         """Try to update a field with given possible names"""
@@ -2815,71 +2957,93 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         messagebox.showerror("Errore Export", f"Errore durante l'export:\n\n{error_msg}")
     
     def reset_workspace(self):
-        """Reset the workspace to initial state with workflow management - COMPLETO"""
+        """Reset the workspace to initial state with workflow management - SAFE VERSION"""
         try:
             self.debug_print("[WORKFLOW] Resetting workspace...")
             
-            # ✅ CLEAR DOCUMENT GROUPS E PANNELLO SINISTRO
-            for group in self.document_groups:
+            # ✅ STOP AUTOMATIC REFLOW FIRST!
+            try:
+                if hasattr(self, '_reflow_scheduled') and self._reflow_scheduled:
+                    self.after_cancel(self._reflow_scheduled)
+                    self._reflow_scheduled = None
+            except:
+                pass
+            
+            # ✅ SAFE CLEANUP DOCUMENT GROUPS
+            if hasattr(self, 'document_groups') and self.document_groups:
+                self.debug_print(f"[RESET] Destroying {len(self.document_groups)} document groups")
+                for group in self.document_groups[:]:  # Create a copy of the list
+                    try:
+                        group.destroy()
+                    except Exception as e:
+                        self.debug_print(f"[RESET] Error destroying group: {e}")
+                self.document_groups.clear()
+            
+            # ✅ SAFE CLEANUP CONTENT FRAME (Less aggressive)
+            if hasattr(self, 'content_frame') and self.content_frame.winfo_exists():
                 try:
-                    group.destroy()
+                    # Clear only if frame still exists
+                    for child in self.content_frame.winfo_children()[:]:  # Create a copy
+                        try:
+                            if child.winfo_exists():
+                                child.destroy()
+                        except:
+                            pass
                 except:
                     pass
-            self.document_groups.clear()
             
-            # ✅ CLEAR ANCHE CONTENT FRAME (Pannello sinistro documenti)
-            if hasattr(self, 'content_frame'):
-                for child in self.content_frame.winfo_children():
-                    try:
-                        child.destroy()
-                    except:
-                        pass
-            
-            # Reset core variables CORRETTO con underscore
+            # Reset core variables
             self.document_loader = None
             self.original_data = None
             self.current_document_name = ""
             self.all_categories = set()
             self.input_folder_name = ""
             
-            # ✅ RESET METADATA FIELDS COMPLETAMENTE
+            # ✅ SAFE METADATA RESET
             if hasattr(self, 'header_metadata'):
                 for field in self.header_metadata:
                     self.header_metadata[field] = ""
                     if hasattr(self, 'metadata_vars') and field in self.metadata_vars:
-                        self.metadata_vars[field].set("")
+                        try:
+                            self.metadata_vars[field].set("")
+                        except:
+                            pass
             
+            # Reset UI variables
             self.selected_thumbnail = None
             self.selected_group = None
             
-            # ✅ CLEAR CENTRAL IMAGE CANVAS
+            # ✅ SAFE UI RESET
             try:
-                self.image_canvas.delete("all")
+                if hasattr(self, 'image_canvas') and self.image_canvas.winfo_exists():
+                    self.image_canvas.delete("all")
                 self.current_image = None
             except:
                 pass
             
-            # Reset UI elements
+            # Reset UI labels safely
+            for attr_name in ['selection_info', 'page_info_label']:
+                try:
+                    widget = getattr(self, attr_name, None)
+                    if widget and widget.winfo_exists():
+                        if attr_name == 'selection_info':
+                            widget.config(text="Nessuna selezione")
+                        else:
+                            widget.config(text="")
+                except:
+                    pass
+            
+            # Reset category variable safely
             try:
-                self.selection_info.config(text="Nessuna selezione")
+                if hasattr(self, 'category_var'):
+                    self.category_var.set("")
             except:
                 pass
             
-            try:
-                self.page_info_label.config(text="")
-            except:
-                pass
-            
-            try:
-                self.category_var.set("")
-            except:
-                pass
-            
-            # ✅ RESET PDF FILES LIST (Pannello documenti)
+            # Reset file lists
             if hasattr(self, 'pdf_files'):
                 self.pdf_files = []
             
-            # ✅ RESET DOCUMENT CACHE
             if hasattr(self, 'document_metadata_cache'):
                 self.document_metadata_cache.clear()
             
@@ -2887,15 +3051,23 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             if hasattr(self, 'workflow_manager'):
                 self.workflow_manager.reset_to_idle()
             
-            # Update scroll region
-            self.after_idle(self.update_scroll_region)
+            # ✅ SAFE SCROLL REGION UPDATE
+            try:
+                self.after_idle(self.update_scroll_region)
+            except:
+                pass
             
-            self.debug_print("Workspace reset completed - TUTTO PULITO!")
+            self.debug_print("[RESET] Workspace reset completed - TUTTO PULITO E SICURO!")
             
         except Exception as e:
             self.debug_print(f"Error in reset_workspace: {e}")
             import traceback
             self.debug_print(f"Full traceback: {traceback.format_exc()}")
+            
+            # ✅ RESET del flag reflow quando esci dal batch
+            if hasattr(self, 'disable_reflow_for_batch'):
+                self.disable_reflow_for_batch = False
+                self.debug_print("[RESET] Reflow re-enabled for normal mode")
 
     def load_single_document(self, doc_path: str, json_path: str = None):
         """Load single document with workflow management"""
