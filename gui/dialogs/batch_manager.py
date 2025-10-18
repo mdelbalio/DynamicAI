@@ -1167,7 +1167,7 @@ class BatchManagerDialog:
         self.stats_label.config(text="Trovati 0 documenti pronti")
         
         # Disable buttons
-        self.btn_load_all.config(state="disabled")
+        # self.btn_load_all.config(state="disabled")
         self.btn_validate_seq.config(state="disabled")
         self.btn_validate_sel.config(state="disabled")
         self.btn_export.config(state="disabled")

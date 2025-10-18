@@ -11,6 +11,8 @@ from tkinter import filedialog, messagebox, ttk
 from tkinter.scrolledtext import ScrolledText
 from PIL import Image, ImageTk
 from typing import List, Optional, Set, Dict
+from .workflow_manager import WorkflowManager, WorkflowMode, InterfaceState
+
 
 # Internal imports
 from config import ConfigManager, DB_FILE
@@ -33,9 +35,14 @@ class AIDOXAApp(tk.Tk):
         # Initialize core components
         self.config_manager = ConfigManager()
         self.category_db = CategoryDatabase(DB_FILE)
+        
         # 🆕 Initialize category database for dynamic management
         self.initialize_category_database_if_needed()
         self.export_manager = ExportManager(self.config_manager)
+        
+        # Initialize Workflow Manager  
+        from .workflow_manager import WorkflowManager, WorkflowMode, InterfaceState
+        self.workflow_manager = WorkflowManager(self)        
         
         # Initialize application
         self.init_variables()
@@ -150,8 +157,10 @@ class AIDOXAApp(tk.Tk):
         # File menu
         file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
-        file_menu.add_command(label="Aggiorna Lista (Preview)", command=self.refresh_document_list, accelerator="Ctrl+R")
-        file_menu.add_command(label="Completa Sequenza / Export", command=self.complete_sequence_export, accelerator="Ctrl+E")
+        file_menu.add_command(label="Apri Documento Singolo", command=self.open_document_dialog, accelerator="Ctrl+O")
+        file_menu.add_separator()
+        file_menu.add_command(label="Aggiorna Lista Preview", command=self.refresh_document_list, accelerator="Ctrl+R")
+        file_menu.add_command(label="Completa Sequenza Export", command=self.complete_sequence_export, accelerator="Ctrl+E")
         file_menu.add_separator()
         file_menu.add_command(label="Salva Configurazione", command=self.save_config)
         file_menu.add_separator()
@@ -1593,6 +1602,283 @@ class AIDOXAApp(tk.Tk):
         # Avvia caricamento progressivo
         self.after(300, lambda: load_document_progressive(0))
 
+    def load_document_from_batch(self, doc_dict: dict):
+        """
+        Load document from batch processing - accepts dictionary from batch database
+        
+        Args:
+            doc_dict: Dictionary containing document info from batch database
+        """
+    def load_document_from_batch(self, doc_dict: dict):
+        """Load document from batch processing with workflow management"""
+        try:
+            # ✅ SET BATCH MODE
+            self.workflow_manager.set_mode(WorkflowMode.BATCH_PROCESSING)
+            
+            # Extract parameters from dictionary
+            if isinstance(doc_dict, dict):
+                doc_path = doc_dict.get('doc_path', '')
+                json_path = doc_dict.get('json_path', '')
+                json_data = doc_dict.get('json_data', {})
+            else:
+                doc_path = str(doc_dict)
+                json_path = ""
+                json_data = {}
+                
+            self.debug_print(f"[BATCH] Loading document: {doc_path}")
+            
+            if not doc_path or not os.path.exists(doc_path):
+                raise ValueError(f"Document path not found: {doc_path}")
+            
+            self.reset_workspace()
+            
+            # Create document loader
+            from loaders import create_document_loader
+            self.document_loader = create_document_loader(doc_path)
+            self.document_loader.load()
+            
+            self.debug_print(f"[BATCH] Document loader created, total pages: {len(self.document_loader.pages) if hasattr(self.document_loader, 'pages') else 'Unknown'}")
+            
+            # Test loading first page
+            try:
+                test_image = self.document_loader.get_page(0)
+                if test_image:
+                    self.debug_print(f"[BATCH] Test: Successfully loaded page 1, size: {test_image.size}")
+                else:
+                    self.debug_print(f"[BATCH] Test: Page 1 returned None")
+            except Exception as e:
+                self.debug_print(f"[BATCH] Test: Error loading page 1: {e}")
+            
+            # Process JSON data
+            if json_data and isinstance(json_data, dict):
+                categories = json_data.get('categories', [])
+                header = json_data.get('header', {})
+                
+                # ✅ DETERMINE INTERFACE MODE
+                has_categories = bool(categories)
+                has_metadata = bool(header)
+                interface_mode = self.workflow_manager.determine_interface_mode(has_categories, has_metadata)
+                
+                # ✅ SET INTERFACE MODE
+                self.workflow_manager.set_mode(WorkflowMode.BATCH_PROCESSING, interface_mode)
+                
+                if categories:
+                    self.debug_print(f"[BATCH] Loading split mode with {len(categories)} categories")
+                    
+                    # Save JSON data temporarily
+                    self.current_json_data = json_data
+                    
+                    # Load in split mode
+                    self.load_split_mode_from_data(categories, header)
+                    
+                    # Load metadata
+                    if header:
+                        self.load_header_metadata(header)
+                    
+                    self.debug_print("[BATCH] Split mode loaded successfully")
+                    return True
+            
+            # Fallback to single document mode
+            self.debug_print("[BATCH] Loading single document mode")
+            self.build_single_document()
+            
+            self.debug_print("[BATCH] Document loaded successfully")
+            return True
+            
+        except Exception as e:
+            self.debug_print(f"[BATCH] Error loading document: {e}")
+            messagebox.showerror("Errore", f"Impossibile aprire il documento: {str(e)}")
+            return False
+
+    def load_split_mode_from_data(self, categories: list, header: dict = None):
+        """Load document in split mode using provided categories data"""
+        try:
+            # Sync categories with database
+            category_names = list(set([cat.get('categoria', '') for cat in categories if cat.get('categoria')]))
+            if category_names:
+                self.category_db.sync_json_categories(category_names, "batch_document")  # ✅ CORRETTO
+                self.debug_print(f"Synced {len(category_names)} categories from batch")
+            
+            # Build document groups
+            self.build_document_groups_from_categories(categories)
+            
+            # Update UI
+            self.update_category_combobox()
+            
+        except Exception as e:
+            self.debug_print(f"Error loading split mode from data: {e}")
+            raise
+
+    def build_document_groups_from_categories(self, json_categories):
+        """Build document groups - ONLY if workflow allows it"""
+        # ✅ CHECK WORKFLOW PERMISSIONS
+        if not self.workflow_manager.can_load_thumbnails():
+            self.debug_print(f"[CATEGORIES] Skipped building groups - Current mode: {self.workflow_manager.current_interface.value}")
+            return
+            
+        if not json_categories:
+            self.debug_print("[CATEGORIES] No categories data to process")
+            return
+            
+        try:
+            self.debug_print(f"[CATEGORIES] Building groups for {len(json_categories)} categories in {self.workflow_manager.current_interface.value} mode")
+            
+            # Get categories and sync with database
+            category_names = self.sync_categories_from_batch(json_categories)
+            self.debug_print(f"Synced {len(category_names)} categories from batch")
+            
+            # Update workflow manager
+            self.workflow_manager.loaded_categories = json_categories
+            self.workflow_manager.categories_present = True
+            
+            # Update category combobox
+            self.update_category_combobox(category_names)
+            
+            # Clear existing groups
+            self.clear_document_groups()
+            
+            # Create document groups with multi-row grid layout
+            self.document_groups = []
+            for i, category_name in enumerate(category_names):
+                group = DocumentGroup(
+                    self.document_scroll_frame,
+                    category_name,
+                    self,
+                    i + 1
+                )
+                group.set_document_loader(self.document_loader)
+                self.document_groups.append(group)
+            
+            # Grid layout for document groups
+            self.update_document_groups_layout()
+            
+            self.debug_print(f"Created {len(self.document_groups)} document groups with grid layout")
+            
+            # ✅ SAFE thumbnail loading per workflow
+            self._safe_build_thumbnail_groups(json_categories)
+            
+            # Ensure category combobox is populated
+            if hasattr(self, 'category_combobox'):
+                self.update_category_combobox(category_names)
+            
+        except Exception as e:
+            self.debug_print(f"[CATEGORIES] Error building document groups: {e}")
+            import traceback
+            self.debug_print(f"[CATEGORIES] Full traceback: {traceback.format_exc()}")
+
+    def _safe_build_thumbnail_groups(self, json_categories):
+        """Safely build thumbnail groups based on workflow state"""
+        try:
+            groups_built = 0
+            for category_data in json_categories:
+                category_name = category_data.get('name', '')
+                pages = category_data.get('pages', [])
+                
+                if category_name and pages:
+                    group = self.get_document_group_by_name(category_name)
+                    if group:
+                        for page_num in pages:
+                            try:
+                                self.debug_print(f"[THUMBNAIL] Attempting to load page {page_num} (PDF index {page_num - 1}) for category {category_name}")
+                                
+                                # Load page image - PDF pages start at 0, JSON at 1
+                                image = self.document_loader.get_page(page_num - 1)
+                                
+                                if image:
+                                    self.debug_print(f"[THUMBNAIL] Successfully loaded page {page_num}, image size: {image.size}")
+                                    group.add_page(page_num, image, category_name)  # ✅ Fixed: use category_name not cat_name
+                                    self.debug_print(f"[THUMBNAIL] Added page {page_num} to group {category_name}")
+                                else:
+                                    self.debug_print(f"[THUMBNAIL] Page {page_num} returned None image")
+                                    
+                            except Exception as e:
+                                self.debug_print(f"[THUMBNAIL] Error loading page {page_num}: {e}")
+                                import traceback
+                                self.debug_print(f"[THUMBNAIL] Full traceback: {traceback.format_exc()}")
+                        
+                        groups_built += 1
+            
+            self.debug_print(f"Built {groups_built} document groups")
+            
+        except Exception as e:
+            self.debug_print(f"[CATEGORIES] Error in safe thumbnail building: {e}")
+
+    def load_header_metadata(self, header: dict):
+        """Load header metadata - ONLY if workflow allows it"""
+        # ✅ CHECK WORKFLOW PERMISSIONS
+        if not self.workflow_manager.can_load_metadata():
+            self.debug_print(f"[METADATA] Skipped loading - Current mode: {self.workflow_manager.current_interface.value}")
+            return
+        
+        if not header:
+            self.debug_print("[METADATA] No header data to load")
+            return
+            
+        try:
+            if not hasattr(self, 'header_metadata'):
+                self.header_metadata = {}
+            
+            # Update header metadata
+            self.header_metadata.update(header)
+            self.workflow_manager.loaded_metadata = header
+            
+            self.debug_print(f"[METADATA] Loading {len(header)} metadata fields in {self.workflow_manager.current_interface.value} mode")
+            
+            # ✅ SAFE metadata loading per modalità
+            self._safe_load_metadata_fields(header)
+            
+            self.debug_print("[METADATA] Successfully loaded metadata fields")
+            
+        except Exception as e:
+            self.debug_print(f"[METADATA] Error loading header metadata: {e}")
+            import traceback
+            self.debug_print(f"[METADATA] Full traceback: {traceback.format_exc()}")
+
+    def _safe_load_metadata_fields(self, header: dict):
+        """Safely load metadata into interface fields"""
+        try:
+            # Try to find and populate metadata fields
+            metadata_mapping = {
+                'NumeroProgetto': ['numero_progetto_entry', 'project_number_entry', 'number_entry'],
+                'Intestatario': ['intestatario_entry', 'owner_entry', 'titolare_entry'], 
+                'IndirizzoImmobile': ['indirizzo_immobile_entry', 'address_entry', 'indirizzo_entry'],
+                'LavoroEseguito': ['lavoro_eseguito_text', 'work_done_text', 'lavori_text', 'work_text'],
+                'EstremiCatastali': ['estremi_catastali_entry', 'cadastral_entry', 'catasto_entry']
+            }
+            
+            fields_updated = 0
+            for key, possible_names in metadata_mapping.items():
+                if key in header:
+                    value = str(header[key])
+                    if self._try_update_field(possible_names, value):
+                        fields_updated += 1
+                        self.debug_print(f"[METADATA] ✅ Updated {key}: {value[:50]}...")
+                    else:
+                        self.debug_print(f"[METADATA] ⚠️ Field not found for {key}")
+            
+            self.debug_print(f"[METADATA] Successfully updated {fields_updated}/{len(header)} fields")
+            
+        except Exception as e:
+            self.debug_print(f"[METADATA] Error in safe loading: {e}")
+
+    def _try_update_field(self, field_names: list, value: str) -> bool:
+        """Try to update a field with given possible names"""
+        for field_name in field_names:
+            if hasattr(self, field_name):
+                try:
+                    field = getattr(self, field_name)
+                    if hasattr(field, 'delete') and hasattr(field, 'insert'):
+                        if hasattr(field, 'get'):  # Entry widget
+                            field.delete(0, tk.END)
+                            field.insert(0, value)
+                        else:  # Text widget
+                            field.delete('1.0', tk.END)
+                            field.insert('1.0', value)
+                        return True
+                except Exception:
+                    continue
+        return False
+
     def create_placeholder_for_remaining(self, start_index, total_docs):
         """Crea PLACEHOLDER per documenti rimanenti (caricamento on-demand)"""
         self.debug_print(f"Creating placeholders for documents {start_index+1}-{total_docs}")
@@ -2529,28 +2815,181 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         messagebox.showerror("Errore Export", f"Errore durante l'export:\n\n{error_msg}")
     
     def reset_workspace(self):
-        """Reset workspace after export"""
-        for group in self.documentgroups:
-            group.destroy()
-        self.documentgroups.clear()
-        self.documentloader = None
-        self.original_data = None
-        self.current_document_name = ""
-        self.all_categories = set()
-        self.input_folder_name = ""
-        for field in self.header_metadata:
-            self.header_metadata[field] = ''
-            if field in self.metadata_vars:
-                self.metadata_vars[field].set('')
-        self.selected_thumbnail = None
-        self.selected_group = None
-        self.selection_info.config(text="Nessuna selezione")
-        self.page_info_label.config(text="")
-        self.category_var.set("")
-        self.image_canvas.delete("all")
-        self.current_image = None
-        self.after_idle(self.update_scroll_region)
-        self.debug_print("Workspace reset completed")
+        """Reset the workspace to initial state with workflow management - COMPLETO"""
+        try:
+            self.debug_print("[WORKFLOW] Resetting workspace...")
+            
+            # ✅ CLEAR DOCUMENT GROUPS E PANNELLO SINISTRO
+            for group in self.document_groups:
+                try:
+                    group.destroy()
+                except:
+                    pass
+            self.document_groups.clear()
+            
+            # ✅ CLEAR ANCHE CONTENT FRAME (Pannello sinistro documenti)
+            if hasattr(self, 'content_frame'):
+                for child in self.content_frame.winfo_children():
+                    try:
+                        child.destroy()
+                    except:
+                        pass
+            
+            # Reset core variables CORRETTO con underscore
+            self.document_loader = None
+            self.original_data = None
+            self.current_document_name = ""
+            self.all_categories = set()
+            self.input_folder_name = ""
+            
+            # ✅ RESET METADATA FIELDS COMPLETAMENTE
+            if hasattr(self, 'header_metadata'):
+                for field in self.header_metadata:
+                    self.header_metadata[field] = ""
+                    if hasattr(self, 'metadata_vars') and field in self.metadata_vars:
+                        self.metadata_vars[field].set("")
+            
+            self.selected_thumbnail = None
+            self.selected_group = None
+            
+            # ✅ CLEAR CENTRAL IMAGE CANVAS
+            try:
+                self.image_canvas.delete("all")
+                self.current_image = None
+            except:
+                pass
+            
+            # Reset UI elements
+            try:
+                self.selection_info.config(text="Nessuna selezione")
+            except:
+                pass
+            
+            try:
+                self.page_info_label.config(text="")
+            except:
+                pass
+            
+            try:
+                self.category_var.set("")
+            except:
+                pass
+            
+            # ✅ RESET PDF FILES LIST (Pannello documenti)
+            if hasattr(self, 'pdf_files'):
+                self.pdf_files = []
+            
+            # ✅ RESET DOCUMENT CACHE
+            if hasattr(self, 'document_metadata_cache'):
+                self.document_metadata_cache.clear()
+            
+            # ✅ RESET WORKFLOW MANAGER
+            if hasattr(self, 'workflow_manager'):
+                self.workflow_manager.reset_to_idle()
+            
+            # Update scroll region
+            self.after_idle(self.update_scroll_region)
+            
+            self.debug_print("Workspace reset completed - TUTTO PULITO!")
+            
+        except Exception as e:
+            self.debug_print(f"Error in reset_workspace: {e}")
+            import traceback
+            self.debug_print(f"Full traceback: {traceback.format_exc()}")
+
+    def load_single_document(self, doc_path: str, json_path: str = None):
+        """Load single document with workflow management"""
+        try:
+            self.debug_print(f"[WORKFLOW] Loading single document: {doc_path}")
+            
+            # Reset workspace
+            self.reset_workspace()
+            
+            # Load JSON if available
+            json_data = {}
+            if json_path and os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        json_data = json.load(f)
+                except Exception as e:
+                    self.debug_print(f"[WORKFLOW] Error loading JSON: {e}")
+            
+            # Determine what we have
+            categories = json_data.get('categories', [])
+            header = json_data.get('header', {})
+            has_categories = bool(categories)
+            has_metadata = bool(header)
+            
+            # ✅ PREPARE WORKFLOW
+            workflow, interface = self.workflow_manager.prepare_for_document_load(
+                has_categories, has_metadata, is_batch=False
+            )
+            
+            # Create document loader
+            from loaders import create_document_loader
+            self.document_loader = create_document_loader(doc_path)
+            self.document_loader.load()
+            
+            # Load content based on workflow
+            if has_categories and self.workflow_manager.can_load_thumbnails():
+                self.build_document_groups_from_categories(categories)
+                
+            if has_metadata and self.workflow_manager.can_load_metadata():
+                self.load_header_metadata(header)
+            
+            self.debug_print(f"[WORKFLOW] Single document loaded in {interface.value} mode")
+            
+        except Exception as e:
+            self.debug_print(f"[WORKFLOW] Error loading single document: {e}")
+            import traceback
+            self.debug_print(f"[WORKFLOW] Full traceback: {traceback.format_exc()}")
+
+    def debug_workflow_status(self):
+        """Debug method to check workflow manager status"""
+        try:
+            if hasattr(self, 'workflow_manager'):
+                wm = self.workflow_manager
+                self.debug_print("=== WORKFLOW MANAGER STATUS ===")
+                self.debug_print(f"Current Workflow: {wm.current_workflow.value}")
+                self.debug_print(f"Current Interface: {wm.current_interface.value}")
+                self.debug_print(f"Batch Context: {wm.batch_context}")
+                self.debug_print(f"Document Loaded: {wm.document_loaded}")
+                self.debug_print(f"Categories Present: {wm.categories_present}")
+                self.debug_print(f"Can Load Metadata: {wm.can_load_metadata()}")
+                self.debug_print(f"Can Load Thumbnails: {wm.can_load_thumbnails()}")
+                self.debug_print("===============================")
+            else:
+                self.debug_print("[WORKFLOW] Workflow Manager not initialized")
+        except Exception as e:
+            self.debug_print(f"[WORKFLOW] Error checking status: {e}")
+
+    def open_document_dialog(self):
+        """Open a document file with workflow management - NEW MENU OPTION"""
+        try:
+            file_path = filedialog.askopenfilename(
+                title="Seleziona documento",
+                filetypes=[
+                    ("PDF files", "*.pdf"),
+                    ("TIFF files", "*.tiff;*.tif"),
+                    ("All files", "*.*")
+                ]
+            )
+            
+            if file_path:
+                self.debug_print(f"[WORKFLOW] Opening single document: {file_path}")
+                
+                # Check for JSON file
+                json_path = os.path.splitext(file_path)[0] + '.json'
+                
+                # ✅ USE NEW WORKFLOW-AWARE METHOD
+                self.load_single_document(file_path, json_path if os.path.exists(json_path) else None)
+                
+                self.document_path = file_path
+                self.debug_print(f"[WORKFLOW] Document opened successfully")
+                
+        except Exception as e:
+            self.debug_print(f"Error opening document: {e}")
+            messagebox.showerror("Errore", f"Errore nell'apertura del documento: {e}")
         
     def export_csv_metadata(self, output_folder: str, exported_files: List[str], 
                        input_file_name: Optional[str] = None) -> str:

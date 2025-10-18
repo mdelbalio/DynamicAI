@@ -18,6 +18,7 @@ class DocumentGroup:
         self.parent = parent
         self.mainapp = mainapp
         self.categoryname = categoryname
+        self.category_name = categoryname  # ✅ AGGIUNGI QUESTA RIGA per compatibility
         self.document_counter = document_counter
         self.isselected = False
         self.thumbnails: List[PageThumbnail] = []
@@ -192,40 +193,33 @@ class DocumentGroup:
         
         return thumbnail
 
-    def add_page(self, pagenum: int, image: Image.Image, position: Optional[int] = None) -> PageThumbnail:
-        """Add a page to this document group with immediate image loading (for drag&drop)
+    def add_page(self, page_num: int, image: Image.Image, position: Optional[int] = None) -> PageThumbnail:
+        """Add a page to this document group with immediate image loading for drag/drop"""
         
-        Args:
-            pagenum: Page number
-            image: PIL Image (already loaded)
-            position: Optional position to insert
+        # Create thumbnail CON immagine per drag/drop
+        thumbnail = PageThumbnail(self.pages_frame, page_num, image, self.categoryname, self.mainapp, self)
         
-        Returns:
-            PageThumbnail created
-        """
-        # Crea thumbnail CON immagine (per drag&drop)
-        thumbnail = PageThumbnail(
-            self.pages_frame, pagenum, image,
-            self.categoryname, self.mainapp, self
-        )
-        
-        # Se c'è un document_loader nel gruppo, assegnalo
         if hasattr(self, 'document_loader') and self.document_loader:
             thumbnail.document_loader = self.document_loader
         
-        # Aggiungi alla lista
+        # ✅ CONVERTI POSITION A INT per sicurezza
+        if position is not None:
+            try:
+                position = int(position)  # ← FIX PRINCIPALE
+            except (ValueError, TypeError):
+                position = None  # Se conversione fallisce, usa append
+        
         if position is None:
             self.thumbnails.append(thumbnail)
-            if pagenum not in self.pages:
-                self.pages.append(pagenum)
+            if page_num not in self.pages:
+                self.pages.append(page_num)
         else:
+            # ✅ ORA position è sicuramente un int
             self.thumbnails.insert(position, thumbnail)
-            if pagenum not in self.pages:
-                self.pages.insert(position, pagenum)
+            if page_num not in self.pages:
+                self.pages.insert(position, page_num)
         
-        # Repack grid
         self.repack_thumbnails_grid()
-        
         return thumbnail
 
     def add_page_lazy(self, pagenum: int, document_loader, position: Optional[int] = None) -> PageThumbnail:
