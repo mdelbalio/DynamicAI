@@ -411,7 +411,7 @@ class PageThumbnail:
             self.text_label.configure(bg="white")
         except tk.TclError:
             pass
-        self.img_label.configure(bg="white")
+        self.img_canvas.configure(bg="white")
         self.text_label.configure(bg="white")
 
     def update_category(self, new_category: str):
@@ -424,7 +424,7 @@ class PageThumbnail:
         if (width, height) != self.current_thumb_size:
             self.current_thumb_size = (width, height)
             self.thumbnail_imgtk = self.create_thumbnail(self.image, (width, height))
-            self.img_label.configure(image=self.thumbnail_imgtk)
+            self.img_canvas.configure(image=self.thumbnail_imgtk)
 
     # Grid layout methods
     def grid(self, **kwargs):

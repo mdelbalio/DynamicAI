@@ -209,9 +209,28 @@ class JobManagerDialog:
             messagebox.showerror("Errore", "Job non trovato")
             return
         
-        # Apri batch viewer
-        from gui.dialogs.batch_viewer_dialog import BatchViewerDialog
-        BatchViewerDialog(self.dialog, job, self.job_manager, self.app)
+        # ✅ NASCONDI JOB MANAGER
+        self.dialog.withdraw()
+        
+        # ✅ APRI BATCH VIEWER DOPO UN DELAY (importante per evitare problemi di parent)
+        self.dialog.after(100, lambda: self._open_batch_viewer_delayed(job))
+
+    def _open_batch_viewer_delayed(self, job):
+        """Apri Batch Viewer con delay"""
+        try:
+            from gui.dialogs.batch_viewer_dialog import BatchViewerDialog
+            
+            # Usa parent principale invece di self.dialog
+            BatchViewerDialog(self.parent, job, self.job_manager, self.app)
+            
+        except Exception as e:
+            print(f"Error opening Batch Viewer: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Mostra di nuovo Job Manager in caso di errore
+            self.dialog.deiconify()
+            messagebox.showerror("Errore", f"Impossibile aprire Batch Viewer:\n{e}")
     
     def on_job_double_click(self, event):
         """Gestisce doppio click su Job"""
