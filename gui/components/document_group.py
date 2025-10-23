@@ -43,27 +43,37 @@ class DocumentGroup:
             self.pages_frame.grid_rowconfigure(row, weight=0)  # Le righe NON si espandono
                         
     def create_widgets(self):
-        """Create the document group UI widgets"""
+        """Create the document group UI widgets - FIXED FOR CORRECT THUMBNAIL SIZE"""
         # Main frame with colored background - RESPONSIVE
         self.frame = tk.Frame(self.parent, bd=2, relief="ridge", bg="#f0f0f0")
         
-        # ✅ CRITICO: NON usare grid_propagate, usa pack_propagate
-        self.frame.pack_propagate(True)  # Permetti ridimensionamento con pack
+        # ✅ CRITICO: Permetti espansione naturale
+        self.frame.pack_propagate(True)
         
         # Create header with document counter and category name
         self.create_header()
         
-        # Container for thumbnails with grid layout - RESPONSIVE
+        # ✅ FIX: Container per thumbnails CON DIMENSIONI MINIME CORRETTE
         self.pages_frame = tk.Frame(self.frame, bg="white")
         self.pages_frame.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # ✅ Configure grid weights for responsive layout (tutte le colonne si espandono)
+        # ✅ CRITICAL: Imposta dimensione minima per permettere thumbnail 60x80
+        # Calcola: (thumbnail_width + padding) * max_columns
+        thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
+        thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
+        padding = 6
+        
+        # Minimo per 4 colonne: (60+6)*4 = 264px
+        min_width = (thumb_width + padding) * 4
+        self.pages_frame.config(width=min_width)
+        
+        # ✅ Configure grid weights for responsive layout
         for col in range(6):  # Max 6 colonne possibili
             self.pages_frame.grid_columnconfigure(col, weight=1, uniform="thumbnail")
         
-        # ✅ NUOVO: Le righe si espandono verticalmente
-        for row in range(20):  # Max 20 righe (supporta fino a 80 thumbnail con 4/row)
-            self.pages_frame.grid_rowconfigure(row, weight=0)  # Le righe NON si espandono (solo le colonne)
+        # ✅ Le righe NON si espandono verticalmente
+        for row in range(20):
+            self.pages_frame.grid_rowconfigure(row, weight=0)
 
     def create_header(self):
         """Create the document group header with counter and category"""

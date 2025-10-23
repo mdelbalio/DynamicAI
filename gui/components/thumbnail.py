@@ -40,11 +40,16 @@ class PageThumbnail:
         # ⭐ NUOVO: Lazy loading support
         self.document_loader = None  # Riferimento al loader per lazy loading
         self.image_loaded = False    # Flag per sapere se immagine è caricata
-        # ✅ NUOVO: Ottieni dimensioni da parametri o config
+        
+        # ✅ CRITICAL FIX: Ottieni dimensioni da parametri o config
         if width is None:
             width = mainapp.config_manager.get('thumbnail_width', 80)
         if height is None:
             height = mainapp.config_manager.get('thumbnail_height', 100)
+
+        # ✅ DEBUG: Log final dimensions used
+        source = "param" if width else "config"
+        mainapp.debug_print(f"[THUMBNAIL] Creating page {pagenum}: {width}x{height}px (source: {source})")
 
         # Store thumbnail size
         self.thumbnail_width = width
@@ -54,21 +59,19 @@ class PageThumbnail:
         self.is_dragging = False
         self.drag_start_pos: Optional[Tuple[int, int]] = None
         
-        # ✅ Usa dimensioni già impostate sopra
-        thumb_width = self.thumbnail_width
-        thumb_height = self.thumbnail_height
-        
         # ⭐ NUOVO: Crea thumbnail o placeholder
         if image is None:
             # Lazy loading - crea placeholder
-            self.thumbnail_img_tk = self.create_placeholder_thumbnail((thumb_width, thumb_height))
+            self.thumbnail_img_tk = self.create_placeholder_thumbnail((width, height))
+            mainapp.debug_print(f"[THUMBNAIL] Page {pagenum}: Created PLACEHOLDER ({width}x{height}px)")
         else:
-            # Caricamento normale
-            self.thumbnail_img_tk = self.create_thumbnail(image, (thumb_width, thumb_height))
+            # Caricamento normale - immagine reale
+            self.thumbnail_img_tk = self.create_thumbnail(image, (width, height))
             self.image_loaded = True
+            mainapp.debug_print(f"[THUMBNAIL] Page {pagenum}: Created REAL image ({width}x{height}px)")
         
         # Store current thumbnail size for updates
-        self.current_thumb_size = (thumb_width, thumb_height)
+        self.current_thumb_size = (width, height)
         
         # Create UI elements
         self.create_widgets()
@@ -90,45 +93,86 @@ class PageThumbnail:
                 self.mainapp.debug_print(f"Error in auto-load: {e}")
 
     def create_widgets(self):
-        """Create the thumbnail UI widgets - RESPONSIVE"""
-        # Main frame with enhanced selection styling
-        self.frame = tk.Frame(self.parent, bd=2, relief="solid", bg="white")
+        """Create the thumbnail UI widgets - FIXED with proper sizing"""
+        # ✅ FIXED: Usa Frame con dimensioni FISSE
+        self.frame = tk.Frame(
+            self.parent, 
+            bd=2, 
+            relief="solid", 
+            bg="white",
+            width=self.thumbnail_width + 8,   # +8 per bordo
+            height=self.thumbnail_height + 28  # +28 per label testo
+        )
         
-        # ✅ NUOVO: Configura frame per centrare contenuto
-        self.frame.grid_rowconfigure(0, weight=1)  # Image row si espande
-        self.frame.grid_rowconfigure(1, weight=0)  # Label row fissa
-        self.frame.grid_columnconfigure(0, weight=1)  # Colonna si espande
+        # ✅ CRITICAL: Blocca propagazione per forzare dimensioni
+        self.frame.pack_propagate(False)
+        self.frame.grid_propagate(False)
         
-        # Image Label - centrata
-        self.img_label = tk.Label(self.frame, image=self.thumbnail_img_tk, bg="white", cursor="hand2")
-        self.img_label.grid(row=0, column=0, padx=2, pady=2, sticky="n")  # Allineata in alto
+        # ✅ FIXED: Usa Canvas invece di Label per controllo dimensioni
+        self.img_canvas = tk.Canvas(
+            self.frame,
+            width=self.thumbnail_width,
+            height=self.thumbnail_height,
+            bg="white",
+            highlightthickness=0,
+            cursor="hand2"
+        )
+        self.img_canvas.pack(pady=(2, 0))
         
-        # Page label - centrata in basso
-        self.text_label = tk.Label(self.frame, text=f"Pagina {self.pagenum}", 
-                                  font=("Arial", 8, "bold"), bg="white")
-        self.text_label.grid(row=1, column=0, pady=(0, 2), sticky="ew")  # Si espande orizzontalmente
+        # Disegna immagine centrata nel canvas
+        self.img_id = self.img_canvas.create_image(
+            self.thumbnail_width // 2,
+            self.thumbnail_height // 2,
+            image=self.thumbnail_img_tk,
+            anchor="center"
+        )
+        
+        # Page label
+        self.text_label = tk.Label(
+            self.frame, 
+            text=f"Pagina {self.pagenum}", 
+            font=("Arial", 8, "bold"), 
+            bg="white"
+        )
+        self.text_label.pack(pady=(0, 2))
 
     def bind_events(self):
         """Bind mouse events for drag and drop and selection"""
-        widgets = [self.frame, self.img_label, self.text_label]
+        # ✅ FIXED: Bind su canvas invece di img_label
+        widgets = [self.frame, self.img_canvas, self.text_label]
         
         for widget in widgets:
-            # Mouse events for drag and drop
             widget.bind("<Button-1>", self.on_button_press)
             widget.bind("<B1-Motion>", self.on_drag_motion)
             widget.bind("<ButtonRelease-1>", self.on_button_release)
-            
-            # Hover events for visual feedback
             widget.bind("<Enter>", self.on_enter)
             widget.bind("<Leave>", self.on_leave)
 
     def create_thumbnail(self, image: Image.Image, size: Tuple[int, int] = (80, 100)) -> ImageTk.PhotoImage:
-        """Create a thumbnail version of the image"""
+        """Create a thumbnail version of the image - FIXED: proper sizing"""
+        from PIL import Image
+        
+        thumb_width, thumb_height = size
         img_copy = image.copy()
-        img_copy.thumbnail(size, RESAMPLEFILTER)
+        
+        # Calculate aspect ratios
+        img_aspect = img_copy.size[0] / img_copy.size[1]
+        target_aspect = thumb_width / thumb_height
+        
+        # ✅ FIX: Usa FIT invece di FILL per mantenere aspect ratio
+        # Resize per fit nella bbox mantenendo aspect ratio
+        img_copy.thumbnail((thumb_width, thumb_height), RESAMPLEFILTER)
+        
+        # ✅ NON creare canvas bianco - usa direttamente l'immagine ridimensionata
+        # Questo evita margini bianchi e thumbnail più piccole
+        
+        # DEBUG: Log final size
+        self.mainapp.debug_print(
+            f"[THUMBNAIL] Page {self.pagenum}: "
+            f"original={image.size}, final={img_copy.size}"
+        )
+        
         return ImageTk.PhotoImage(img_copy)
-
-    # ⭐⭐⭐ AGGIUNGI QUESTI METODI QUI ⭐⭐⭐
 
     def create_placeholder_thumbnail(self, size: Tuple[int, int] = (80, 100)) -> ImageTk.PhotoImage:
         """Crea thumbnail placeholder veloce per lazy loading"""
@@ -208,14 +252,20 @@ class PageThumbnail:
         # Ricrea thumbnail con immagine reale
         thumb_width = self.mainapp.config_manager.get('thumbnail_width', 80)
         thumb_height = self.mainapp.config_manager.get('thumbnail_height', 100)
-        self.thumbnail_imgtk = self.create_thumbnail(image, (thumb_width, thumb_height))
         
-        # Aggiorna label
-        self.img_label.configure(image=self.thumbnail_imgtk)
+        self.thumbnail_img_tk = self.create_thumbnail(image, (thumb_width, thumb_height))
+        
+        # ✅ FIXED: Aggiorna canvas invece di label
+        try:
+            if hasattr(self, 'img_canvas') and self.img_canvas.winfo_exists():
+                self.img_canvas.itemconfig(self.img_id, image=self.thumbnail_img_tk)
+                self.img_canvas.image = self.thumbnail_img_tk  # Keep reference
+        except Exception as e:
+            self.mainapp.debug_print(f"Error updating thumbnail image: {e}")
         
         self.image_loaded = True
-        self.mainapp.debug_print(f"Image loaded for page {self.pagenum}")
-
+        self.mainapp.debug_print(f"Image loaded and displayed for page {self.pagenum}")
+    
     def set_document_loader(self, loader):
         """Imposta riferimento al document loader per lazy loading"""
         self.document_loader = loader
@@ -273,16 +323,16 @@ class PageThumbnail:
         """Handle mouse enter - show hover effect"""
         if not self.is_selected:
             self.frame.configure(bg="#E0E0E0")
-            self.img_label.configure(bg="#E0E0E0")
+            self.img_canvas.configure(bg="#E0E0E0")  # ✅ canvas invece di img_label
             self.text_label.configure(bg="#E0E0E0")
 
     def on_leave(self, event):
         """Handle mouse leave - remove hover effect"""
         if not self.is_selected:
             self.frame.configure(bg="white")
-            self.img_label.configure(bg="white")
+            self.img_canvas.configure(bg="white")  # ✅ canvas invece di img_label
             self.text_label.configure(bg="white")
-
+        
     def on_button_press(self, event):
         """Handle button press - start potential drag"""
         # ⭐ NUOVO: Carica immagine reale se non ancora caricata (lazy loading)
@@ -349,15 +399,17 @@ class PageThumbnail:
         """Select this thumbnail"""
         self.is_selected = True
         self.frame.configure(bg="#87CEEB", relief="raised", bd=3)
-        self.img_label.configure(bg="#87CEEB")
+        self.img_canvas.configure(bg="#87CEEB")  # ✅ canvas
         self.text_label.configure(bg="#87CEEB")
 
     def deselect(self):
+        """Deselect this thumbnail"""
         self.is_selected = False
         try:
             self.frame.configure(bg="white", relief="solid", bd=2)
+            self.img_canvas.configure(bg="white")  # ✅ canvas
+            self.text_label.configure(bg="white")
         except tk.TclError:
-            # Widget già distrutto, ignora
             pass
         self.img_label.configure(bg="white")
         self.text_label.configure(bg="white")

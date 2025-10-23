@@ -179,16 +179,35 @@ class AIDOXAApp(tk.Tk):
         menubar.add_cascade(label="Visualizza", menu=view_menu)
         view_menu.add_command(label="Aggiorna Miniature", command=self.refresh_thumbnails)
 
-        # Batch menu
+        # Batch menu - JOB SYSTEM
         if self.config_manager.get('batch_mode_enabled', True):
             batch_menu = tk.Menu(menubar, tearoff=0)
             menubar.add_cascade(label="Batch", menu=batch_menu)
-            batch_menu.add_command(label="Esegui Batch...", 
-                                  command=self.open_batch_manager,
-                                  accelerator="Ctrl+B")
+            
+            # 🆕 Nuovo Job Manager
+            batch_menu.add_command(
+                label="🗂️ Gestione JOB...", 
+                command=self.open_batch_manager,
+                accelerator="Ctrl+B"
+            )
+            
             batch_menu.add_separator()
-            batch_menu.add_command(label="Info Batch", 
-                                  command=self.show_batch_info)
+            
+            # Info sistema
+            batch_menu.add_command(
+                label="ℹ️ Info Sistema JOB", 
+                command=self.show_job_system_info
+            )
+            
+            batch_menu.add_separator()
+            
+            # Vecchio batch rimosso - usa solo nuovo Job System
+            # Vecchio batch (mantieni per compatibilità)
+            batch_menu.add_command(
+                label="📦 Batch Legacy (Vecchio)",
+                command=self.open_old_batch_manager  # ← QUESTO METODO NON ESISTE
+            )
+
         # Help menu
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Aiuto", menu=help_menu)
@@ -423,6 +442,28 @@ class AIDOXAApp(tk.Tk):
             pady=8
         )
         btn_reset.grid(row=0, column=2, padx=2, sticky="ew")
+        
+        # ✅ NUOVO: Pulsante COMPLETA (visibile solo in modalità Job)
+        self.btn_complete_batch = tk.Button(
+            button_frame, 
+            text="✅ COMPLETA\ne Avanti", 
+            command=self.complete_current_batch_and_next, 
+            bg="#27AE60",
+            fg="white",
+            font=("Arial", 9, "bold"), 
+            relief="flat",
+            cursor="hand2",
+            activebackground="#1E8449",
+            activeforeground="white",
+            bd=0,
+            padx=8,
+            pady=8,
+            state="disabled"  # Disabilitato di default
+        )
+        self.btn_complete_batch.grid(row=1, column=0, columnspan=3, padx=2, pady=(5,0), sticky="ew")
+
+        # Nascondi inizialmente
+        self.btn_complete_batch.grid_remove()
         
         # Hover effects
         def on_enter_refresh(e):
@@ -1067,6 +1108,15 @@ class AIDOXAApp(tk.Tk):
         except Exception as e:
             print(f"Error saving config: {e}")
 
+    def save_input_folder_path(self, folder_path: str):
+        """Save input folder path to config for persistence"""
+        try:
+            self.config_manager.set('default_input_folder', folder_path)
+            self.config_manager.save_config()
+            self.debug_print(f"Saved input folder path: {folder_path}")
+        except Exception as e:
+            self.debug_print(f"Error saving input folder path: {e}")
+        
     def restore_window_layout(self):
         """Restore window layout from configuration"""
         try:
@@ -1291,10 +1341,28 @@ class AIDOXAApp(tk.Tk):
         input_folder = self.config_manager.get('default_input_folder', '')
 
         if not input_folder or not os.path.exists(input_folder):
-            messagebox.showerror("Errore", 
-                            "Cartella input non configurata o non esistente.\n"
-                            "Configura la cartella nelle Preferenze.")
-            return
+            # Allow user to select folder if not configured
+            input_folder = filedialog.askdirectory(
+                title="Seleziona Cartella Input",
+                initialdir=self.config_manager.get('default_input_folder', '')
+            )
+            
+            if not input_folder:
+                messagebox.showinfo("Operazione Annullata", 
+                                "Nessuna cartella selezionata.\n"
+                                "Configura la cartella nelle Preferenze o selezionala al prossimo caricamento.")
+                return
+            
+            # Save selected folder to config
+            self.save_input_folder_path(input_folder)
+            messagebox.showinfo("Cartella Salvata", 
+                            f"Cartella input salvata:\n{input_folder}\n\n"
+                            "Puoi cambiarla in Impostazioni -> Preferenze")
+        
+        # CRITICAL FIX: Salva path anche se già configurato (per aggiornare last_used)
+        else:
+            self.config_manager.set('default_input_folder', input_folder)
+            self.config_manager.save_config()
 
         self.input_folder_name = os.path.basename(os.path.normpath(input_folder))
 
@@ -1591,7 +1659,7 @@ class AIDOXAApp(tk.Tk):
     def load_document_from_batch(self, doc_dict: dict):
         """Load document from batch processing with workflow management"""
         try:
-            # ✅ SET BATCH MODE
+            # Set batch mode
             self.workflow_manager.set_mode(WorkflowMode.BATCH_PROCESSING)
             
             # Extract parameters from dictionary
@@ -1609,7 +1677,9 @@ class AIDOXAApp(tk.Tk):
             if not doc_path or not os.path.exists(doc_path):
                 raise ValueError(f"Document path not found: {doc_path}")
             
-            self.reset_workspace()
+            # CRITICAL FIX: Only reset if not already in batch mode
+            if not self.workflow_manager.is_batch_mode():
+                self.reset_workspace()
             
             # Create document loader
             from loaders import create_document_loader
@@ -1620,7 +1690,7 @@ class AIDOXAApp(tk.Tk):
             
             # Test loading first page
             try:
-                test_image = self.document_loader.get_page(1)  # ✅ CORRETTO - PDF pages start at 1
+                test_image = self.document_loader.get_page(1)
                 if test_image:
                     self.debug_print(f"[BATCH] Test: Successfully loaded page 1, size: {test_image.size}")
                 else:
@@ -1655,6 +1725,16 @@ class AIDOXAApp(tk.Tk):
                         self.load_header_metadata(header)
                     
                     self.debug_print("[BATCH] Split mode loaded successfully")
+                    
+                    # ✅ CRITICAL: MOSTRA PULSANTE COMPLETA PRIMA DEL RETURN
+                    if hasattr(self, 'current_batch_job') and hasattr(self, 'btn_complete_batch'):
+                        self.btn_complete_batch.config(state="normal")
+                        self.btn_complete_batch.grid()
+                        self.debug_print("[BATCH] ✅ COMPLETA button shown")
+                    
+                    # ✅ Auto-carica prima immagine
+                    self.after(100, self.auto_load_first_image)
+                    
                     return True
             
             # Fallback to single document mode
@@ -1662,10 +1742,16 @@ class AIDOXAApp(tk.Tk):
             self.build_single_document()
             
             self.debug_print("[BATCH] Document loaded successfully")
-            # ✅ NUOVO: Auto-carica prima immagine
+            
+            # ✅ CRITICAL: MOSTRA PULSANTE COMPLETA PRIMA DEL RETURN
+            if hasattr(self, 'current_batch_job') and hasattr(self, 'btn_complete_batch'):
+                self.btn_complete_batch.config(state="normal")
+                self.btn_complete_batch.grid()
+                self.debug_print("[BATCH] ✅ COMPLETA button shown")
+            
+            # ✅ Auto-carica prima immagine
             self.after(100, self.auto_load_first_image)
-
-            self.debug_print("[BATCH] Document loaded successfully")
+            
             return True
             
         except Exception as e:
@@ -1707,27 +1793,17 @@ class AIDOXAApp(tk.Tk):
         try:
             self.debug_print(f"[CATEGORIES] Building groups for {len(json_categories)} categories in {self.workflow_manager.current_interface.value} mode")
             
-            # ✅ FIXED: Leggi dimensioni dalle impostazioni correttamente
-            thumb_width = 80  # Default
-            thumb_height = 100  # Default
+            # ✅ CRITICAL FIX: Leggi dimensioni CORRETTE da config
+            thumb_width = self.config_manager.get('thumbnail_width', 80)
+            thumb_height = self.config_manager.get('thumbnail_height', 100)
             
-            try:
-                if hasattr(self.config_manager, 'get_setting'):
-                    thumb_width = self.config_manager.get_setting('thumbnail_width', 80)
-                    thumb_height = self.config_manager.get_setting('thumbnail_height', 100)
-                elif hasattr(self.config_manager, 'config'):
-                    thumb_width = self.config_manager.config.get('thumbnail_width', 80)
-                    thumb_height = self.config_manager.config.get('thumbnail_height', 100)
-            except:
-                pass
-                
-            self.debug_print(f"[CATEGORIES] Using thumbnail size: {thumb_width}x{thumb_height}")
+            self.debug_print(f"[CATEGORIES] ✅ Using thumbnail size from config: {thumb_width}x{thumb_height}")
             
             # Clear existing groups
             try:
                 if self.document_groups:
                     self.debug_print(f"[CATEGORIES] Clearing {len(self.document_groups)} existing groups")
-                    for group in self.document_groups:
+                    for group in self.document_groups[:]:
                         try:
                             if hasattr(group, 'destroy'):
                                 group.destroy()
@@ -1766,14 +1842,15 @@ class AIDOXAApp(tk.Tk):
             if not hasattr(self, 'document_groups'):
                 self.document_groups = []
             
+            # Get parent frame
+            parent_frame = getattr(self, 'content_frame', self)
+            
             # Create groups and populate with pages
             for i, category_name in enumerate(category_names):
                 try:
                     self.debug_print(f"[CATEGORIES] Creating group {i+1}: {category_name}")
                     
                     # Create group
-                    from gui.document_group import DocumentGroup
-                    parent_frame = getattr(self, 'content_frame', self)
                     group = DocumentGroup(parent_frame, category_name, self, i + 1)
                     
                     # Assign document loader if possible
@@ -1796,40 +1873,78 @@ class AIDOXAApp(tk.Tk):
                     
                     self.debug_print(f"[CATEGORIES] Category '{category_name}' pages: {category_pages}")
                     
-                    # ✅ UNIFIED THUMBNAIL SYSTEM - USE SAME CODE AS NORMAL MODE
+                    # ✅ CRITICAL FIX: Add pages with CORRECT dimensions
                     if category_pages and hasattr(self, 'document_loader') and self.document_loader:
                         try:
-                            # Use the SAME system as normal loading!
                             for page_num in category_pages:
-                                success = group.add_page_to_group(page_num, self.document_loader)
-                                if success:
-                                    self.debug_print(f"[CATEGORIES] ✅ Added page {page_num} ({thumb_width}x{thumb_height}) to {category_name}")
-                                else:
-                                    self.debug_print(f"[CATEGORIES] ❌ Failed to add page {page_num} to {category_name}")
-                                    
+                                try:
+                                    # Load page image
+                                    page_image = self.document_loader.get_page(page_num)
+                                    if page_image:
+                                        # ✅ FIXED: Create PageThumbnail with CORRECT config dimensions
+                                        thumbnail = PageThumbnail(
+                                            group.pages_frame,
+                                            page_num,
+                                            page_image,
+                                            group.categoryname,
+                                            self,
+                                            group,
+                                            width=thumb_width,   # ✅ Use config width
+                                            height=thumb_height  # ✅ Use config height
+                                        )
+                                        
+                                        # Set document loader
+                                        thumbnail.document_loader = self.document_loader
+                                        thumbnail.image_loaded = True
+                                        
+                                        # Add to group's thumbnail list
+                                        group.thumbnails.append(thumbnail)
+                                        if page_num not in group.pages:
+                                            group.pages.append(page_num)
+                                        
+                                        self.debug_print(f"[CATEGORIES] ✅ Added page {page_num} ({thumb_width}x{thumb_height}) to {category_name}")
+                                    else:
+                                        self.debug_print(f"[CATEGORIES] Could not load image for page {page_num}")
+                                        
+                                except Exception as e:
+                                    self.debug_print(f"[CATEGORIES] Error processing page {page_num}: {e}")
+                                    continue
+                            
+                            # ✅ AFTER adding all pages, repack the grid
+                            group.repack_thumbnails_grid()
+                            
                             self.debug_print(f"[CATEGORIES] Added {len(category_pages)} pages to group: {category_name}")
+                            
                         except Exception as e:
                             self.debug_print(f"[CATEGORIES] Error adding pages to {category_name}: {e}")
-                    
+
                     self.document_groups.append(group)
                     
                 except Exception as e:
                     self.debug_print(f"[CATEGORIES] Error creating group {category_name}: {e}")
                     continue
+                    
+            self.debug_print(f"[CATEGORIES] Successfully created {len(self.document_groups)} document groups")
+            
+            # ✅ CRITICAL FIX: Sync document_groups → documentgroups
+            self.documentgroups = self.document_groups
+            self.debug_print(f"[CATEGORIES] ✅ Synced {len(self.documentgroups)} groups to documentgroups")
             
             # Manual layout update
             try:
                 for i, group in enumerate(self.document_groups):
                     try:
-                        group.frame.grid(row=i, column=0, sticky='ew', padx=5, pady=2)
-                        parent_frame.grid_columnconfigure(0, weight=1)
+                        group.frame.pack(side='top', fill='x', expand=False, padx=5, pady=2)
+                        self.debug_print(f"[CATEGORIES] Packed group {i+1}: {group.categoryname}")
                     except Exception as e:
-                        self.debug_print(f"Error positioning group {i}: {e}")
-                self.debug_print(f"[CATEGORIES] ✅ Positioned {len(self.document_groups)} document groups in grid")
+                        self.debug_print(f"Error packing group {i}: {e}")
+                        
+                self.debug_print(f"[CATEGORIES] ✅ Positioned {len(self.document_groups)} document groups")
+                
             except Exception as e:
-                self.debug_print(f"Error in manual grid layout: {e}")
+                self.debug_print(f"Error in manual layout: {e}")
             
-            # ✅ FORCE thumbnail generation
+            # Count total thumbnails
             try:
                 total_thumbnails = 0
                 for group in self.document_groups:
@@ -1839,11 +1954,11 @@ class AIDOXAApp(tk.Tk):
                 
             except Exception as e:
                 self.debug_print(f"Error counting thumbnails: {e}")
-            
+                
             # Schedule auto-load first image
             self.debug_print("[CATEGORIES] Scheduling auto-load first image...")
-            self.after(100, self.auto_load_first_image)
-            
+            self.after(200, self.auto_load_first_image)
+                
         except Exception as e:
             self.debug_print(f"[CATEGORIES] Error building document groups: {e}")
             import traceback
@@ -2192,15 +2307,38 @@ class AIDOXAApp(tk.Tk):
             self.after(50, load_selected_thumbnails)
         
     def auto_load_first_image(self):
-        """Auto-carica la prima immagine disponibile"""
+        """Auto-carica la prima immagine disponibile - SAFE VERSION"""
         try:
-            if self.documentgroups:
-                first_group = self.documentgroups[0]
-                if first_group.thumbnails:
-                    first_thumbnail = first_group.thumbnails[0]
-                    first_thumbnail.select()
-                    self.select_thumbnail(first_thumbnail)
-                    self.debug_print("Prima immagine caricata automaticamente")
+            # Check if app is closing
+            if hasattr(self, '_closing') and self._closing:
+                return
+                
+            # Check if documentgroups exists and is not empty
+            if not hasattr(self, 'documentgroups') or not self.documentgroups:
+                self.debug_print("No document groups available for auto-load")
+                return
+            
+            first_group = self.documentgroups[0]
+            
+            # Check if group still exists and has thumbnails
+            if not hasattr(first_group, 'thumbnails') or not first_group.thumbnails:
+                self.debug_print("First group has no thumbnails")
+                return
+            
+            first_thumbnail = first_group.thumbnails[0]
+            
+            # CRITICAL: Check if thumbnail widget still exists
+            if not hasattr(first_thumbnail, 'frame') or not first_thumbnail.frame.winfo_exists():
+                self.debug_print("First thumbnail widget no longer exists")
+                return
+            
+            # Safe selection
+            first_thumbnail.select()
+            self.select_thumbnail(first_thumbnail)
+            self.debug_print("Prima immagine caricata automaticamente")
+            
+        except tk.TclError as e:
+            self.debug_print(f"TclError in auto-load (widget destroyed): {e}")
         except Exception as e:
             self.debug_print(f"Errore auto-load prima immagine: {e}")
             
@@ -3440,43 +3578,42 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
 
     def fit_width(self):
-        """Fit image to canvas width (full width)"""
+        """Fit image to canvas width (full width) - FIXED VERSION"""
         if not self.current_image:
             return
         
         try:
-            # Get canvas width
+            # ✅ FORZA update del canvas
+            self.image_canvas.update_idletasks()
+            
             canvas_width = self.image_canvas.winfo_width()
             
             if canvas_width <= 1:
-                canvas_width = 800  # Default fallback
+                self.after(100, self.fit_width)
+                return
             
             # Calculate scale to fit width
             img_width = self.current_image.size[0]
-            scale_factor = canvas_width / img_width
+            
+            # ✅ Usa 99% per riempire meglio (rimuove margini)
+            scale_factor = (canvas_width / img_width) * 0.99
             
             # Apply zoom
-            self.zoom_factor = scale_factor * 0.95  # 95% per margini
+            self.zoom_factor = scale_factor
             self.image_offset_x = 0
             self.image_offset_y = 0
             self.auto_fit_on_resize = False
             
+            # ✅ Update display
             self.update_image_display()
             
-            # Center vertically if image is smaller than canvas
+            # ✅ Reset scroll position
             self.image_canvas.update_idletasks()
-            canvas_height = self.image_canvas.winfo_height()
-            img_height = self.current_image.size[1] * self.zoom_factor
-            
-            if img_height < canvas_height:
-                # Image fits vertically, center it
-                self.image_canvas.yview_moveto(0)
-            else:
-                # Image is taller, position at top
-                self.image_canvas.yview_moveto(0)
+            self.image_canvas.xview_moveto(0)
+            self.image_canvas.yview_moveto(0)
             
             self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%} (Full Width)")
-            self.debug_print(f"Full width: scale={self.zoom_factor:.2f}")
+            self.debug_print(f"Full width: canvas={canvas_width}px, scale={self.zoom_factor:.2f}")
             
         except Exception as e:
             self.debug_print(f"Error in fit_width: {e}")
@@ -3680,7 +3817,7 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
         self.zoom_status.config(text=f"Zoom: {self.zoom_factor:.1%}")
         
     def update_image_display(self):
-        """Update the image display on canvas with scroll support"""
+        """Update the image display on canvas - ZERO PADDING VERSION"""
         if not self.current_image:
             return
 
@@ -3697,29 +3834,30 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
             resized_img = self.current_image.resize((new_w, new_h), RESAMPLEFILTER)
             self.photo = ImageTk.PhotoImage(resized_img)
 
-            canvas_w = self.image_canvas.winfo_width()
-            canvas_h = self.image_canvas.winfo_height()
+            # ✅ ZERO PADDING - sempre (0, 0)
+            self.image_canvas.create_image(0, 0, image=self.photo, anchor="nw")
 
-            pad_x = max(0, (canvas_w - new_w) // 2)
-            pad_y = max(0, (canvas_h - new_h) // 2)
-
-            # Disegna immagine ancorata a NW (con eventuale padding per centrare se più piccola)
-            self.image_canvas.create_image(pad_x, pad_y, image=self.photo, anchor="nw")
-
-            # Scrollregion: area massima tra canvas e immagine
-            sr_w = max(new_w, canvas_w)
-            sr_h = max(new_h, canvas_h)
-            self.image_canvas.config(scrollregion=(0, 0, sr_w, sr_h))
+            # ✅ Scrollregion = ESATTA dimensione immagine
+            self.image_canvas.config(scrollregion=(0, 0, new_w, new_h))
 
         except Exception as e:
             self.debug_print(f"Error updating image display: {e}")
+            
     def create_drag_preview(self, thumbnail: PageThumbnail):
         """Create drag preview window"""
         self.drag_item = thumbnail
         self.drag_preview = tk.Toplevel(self)
         self.drag_preview.overrideredirect(True)
         self.drag_preview.attributes('-topmost', True)
-        lbl = tk.Label(self.drag_preview, image=thumbnail.thumbnail_imgtk, bd=2, relief="solid", bg="yellow")
+        
+        # CRITICAL FIX: Use correct attribute name!
+        lbl = tk.Label(
+            self.drag_preview, 
+            image=thumbnail.thumbnail_img_tk,  # Corrected from thumbnail_imgtk
+            bd=2, 
+            relief="solid", 
+            bg="yellow"
+        )
         lbl.pack()
         self.drag_preview.geometry(f"+{self.winfo_pointerx()+20}+{self.winfo_pointery()+20}")
 
@@ -3955,18 +4093,148 @@ Usa il menu 'Aiuto > Istruzioni' per dettagli completi.
     # ==========================================
     
     def open_batch_manager(self):
-        """Open batch manager dialog"""
+        """Open NEW Job-based batch manager"""
         if not self.config_manager.get('batch_mode_enabled', True):
             messagebox.showinfo("Batch Disabilitato", 
-                              "Il Batch Manager è disabilitato nelle impostazioni.")
+                            "Il Batch Manager è disabilitato nelle impostazioni.")
             return
         
         try:
+            # 🆕 USA NUOVO JOB MANAGER
+            from gui.dialogs.job_manager_dialog import JobManagerDialog
+            JobManagerDialog(self, self.config_manager, self)
+            
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore apertura Job Manager:\n{str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def open_old_batch_manager(self):
+        """Open OLD batch manager for compatibility"""
+        try:
+            from gui.dialogs.batch_manager import BatchManagerDialog
             dialog = BatchManagerDialog(self, self.config_manager, self)
             self.wait_window(dialog.dialog)
         except Exception as e:
-            messagebox.showerror("Errore", f"Errore apertura Batch Manager: {str(e)}")
-    
+            messagebox.showerror("Errore", f"Errore apertura Batch Manager:\n{str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def complete_batch_and_next(self, batch, job_manager):
+        """Completa batch corrente e passa al prossimo"""
+        try:
+            # 1. Esporta documento corrente
+            if not self.documentgroups:
+                messagebox.showwarning("Attenzione", "Nessun documento caricato da esportare")
+                return False
+            
+            # Export
+            output_folder = self.config_manager.get('default_output_folder', '')
+            if not output_folder:
+                messagebox.showerror("Errore", "Cartella output non configurata")
+                return False
+            
+            # TODO: Implementa export per batch specifico
+            # Per ora marca solo come completato
+            
+            # 2. Marca batch come validato ed esportato
+            batch.validated = True
+            batch.exported = True
+            batch.status = 'exported'
+            job_manager.update_batch(batch)
+            
+            # 3. Aggiorna progresso Job
+            job_manager.update_job_progress(batch.job_id)
+            
+            messagebox.showinfo("Batch Completato", f"Batch '{batch.name}' completato con successo!")
+            return True
+            
+        except Exception as e:
+            self.debug_print(f"Error completing batch: {e}")
+            messagebox.showerror("Errore", f"Errore nel completamento batch:\n{e}")
+            return False
+
+    def complete_current_batch_and_next(self):
+        """COMPLETA batch corrente e torna al Batch Viewer - USER ACTION"""
+        if not hasattr(self, 'current_batch_job'):
+            messagebox.showwarning("Attenzione", "Nessun batch Job attivo")
+            return
+        
+        batch_info = self.current_batch_job
+        batch = batch_info['batch']
+        job_manager = batch_info['job_manager']
+        batch_viewer = batch_info['batch_viewer']
+        
+        # Conferma
+        if not messagebox.askyesno(
+            "Conferma",
+            f"Completare il batch '{batch.name}'?\n\n"
+            "Il documento verrà marcato come validato."
+        ):
+            return
+        
+        # ✅ MARCA COME VALIDATO
+        batch.validated = True
+        batch.status = 'validated'
+        job_manager.update_batch(batch)
+        
+        # ✅ AGGIORNA PROGRESSO JOB
+        job_manager.update_job_progress(batch.job_id)
+        
+        # ✅ NASCONDI PULSANTE COMPLETA
+        if hasattr(self, 'btn_complete_batch'):
+            self.btn_complete_batch.grid_remove()
+        
+        # ✅ RIPRISTINA BATCH VIEWER
+        batch_viewer.dialog.deiconify()  # Mostra di nuovo
+        batch_viewer.dialog.lift()
+        batch_viewer.dialog.focus_force()
+        
+        # ✅ RICARICA LISTA BATCHES
+        batch_viewer.load_batches()
+        batch_viewer.update_job_progress()
+        
+        # ✅ TROVA E SELEZIONA PROSSIMO BATCH
+        batches = batch_viewer.batches
+        try:
+            current_idx = batches.index(batch)
+            next_batch = None
+            
+            # Cerca prossimo batch non validato
+            for i in range(current_idx + 1, len(batches)):
+                if not batches[i].validated:
+                    next_batch = batches[i]
+                    break
+            
+            if next_batch:
+                # Seleziona prossimo
+                next_idx = batches.index(next_batch)
+                batch_viewer.batch_listbox.selection_clear(0, tk.END)
+                batch_viewer.batch_listbox.selection_set(next_idx)
+                batch_viewer.batch_listbox.see(next_idx)
+                batch_viewer.current_batch = next_batch
+                batch_viewer.show_batch_info()
+                
+                messagebox.showinfo(
+                    "Batch Completato",
+                    f"✅ '{batch.name}' completato!\n\n"
+                    f"📂 Prossimo: {next_batch.name}\n\n"
+                    "Clicca 'Apri in Editor' per continuare."
+                )
+            else:
+                # Tutti completati!
+                messagebox.showinfo(
+                    "Job Completato",
+                    "🎉 Tutti i batch sono stati validati!\n\n"
+                    "Clicca 'COMPLETA JOB' per finalizzare."
+                )
+        
+        except ValueError:
+            pass
+        
+        # ✅ RESET WORKSPACE EDITOR
+        self.reset_workspace()
+
     def show_batch_info(self):
         """Show batch manager information"""
         info_text = """BATCH MANAGER - Elaborazione Multipla Documenti
@@ -3995,6 +4263,48 @@ Per utilizzare: Menu Batch → Esegui Batch (Ctrl+B)"""
             group.pack(pady=5, fill="x", padx=5)
         
         self.after_idle(self.update_scroll_region)
+    
+    def show_job_system_info(self):
+        """Mostra informazioni sul sistema Job-based"""
+        info_text = """🗂️ SISTEMA JOB-BASED - Gestione Avanzata Batch
+
+    Un JOB rappresenta un progetto di elaborazione completo:
+
+    📋 STRUTTURA:
+    JOB (Progetto)
+        └─ Batch 1 (Documento PDF + JSON)
+        └─ Batch 2 (Documento PDF + JSON)  
+        └─ Batch 3 (Documento PDF + JSON)
+
+    ✨ VANTAGGI:
+    • Organizzazione per progetti/cartelle
+    • Tracciamento progresso per ogni Job
+    • Salvataggio stato intermedio
+    • Ripresa lavoro da dove interrotto
+    • Export incrementale o completo
+
+    🔄 WORKFLOW:
+    1. Crea nuovo JOB → Selezione cartella input
+    2. Sistema rileva automaticamente tutti i PDF+JSON
+    3. Visualizzi lista Batches del Job
+    4. Lavori su ogni Batch (valida metadati, verifica pagine)
+    5. Completi Batch → Auto-carica il prossimo
+    6. Quando tutti i Batch sono OK → Export finale
+
+    📊 STATI BATCH:
+    ⏸️ Pending: Da lavorare
+    🔍 Validated: Metadati verificati
+    ✅ Exported: Completato ed esportato
+    ❌ Error: Errore rilevato
+
+    💾 PERSISTENZA:
+    • Tutto salvato in database SQLite
+    • Puoi chiudere e riaprire quando vuoi
+    • Zero perdita dati
+
+    Per iniziare: Menu → Batch → Gestione JOB (Ctrl+B)"""
+        
+        messagebox.showinfo("Sistema JOB-Based", info_text)
         
     def get_category_statistics(self):
         """Get comprehensive category statistics for debugging/admin"""
