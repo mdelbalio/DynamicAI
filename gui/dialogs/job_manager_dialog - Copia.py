@@ -4,6 +4,7 @@ from database.job_manager import JobManager
 from models.job import Job
 import os
 import json
+from tkinter import messagebox
 
 class JobManagerDialog:
     """Dialog per gestione Job (simile alla tua UI)"""
@@ -14,6 +15,7 @@ class JobManagerDialog:
         self.app = app
         
         # ✅ FIX: Usa AppData/Roaming direttamente
+        import os
         config_dir = os.path.join(
             os.path.expanduser('~'),
             'AppData', 'Roaming', 'DynamicAI'
@@ -212,7 +214,7 @@ class JobManagerDialog:
         # ✅ NASCONDI JOB MANAGER
         self.dialog.withdraw()
         
-        # ✅ APRI BATCH VIEWER DOPO UN DELAY
+        # ✅ APRI BATCH VIEWER DOPO UN DELAY (importante per evitare problemi di parent)
         self.dialog.after(100, lambda: self._open_batch_viewer_delayed(job))
 
     def _open_batch_viewer_delayed(self, job):
@@ -285,21 +287,15 @@ class JobManagerDialog:
         # Progress tracking
         exported_count = 0
         error_count = 0
-        error_messages = []
-        
-        # ✅ NASCONDI JOB MANAGER durante export
-        self.dialog.withdraw()
         
         # Export ogni batch
-        for i, batch in enumerate(batches, 1):
+        for batch in batches:
             try:
-                print(f"\n[EXPORT] Processing batch {i}/{len(batches)}: {batch.name}")
-                
                 # Carica JSON
                 with open(batch.json_path, 'r', encoding='utf-8') as f:
                     json_data = json.load(f)
                 
-                # ✅ ESPORTA usando il sistema dell'app
+                # Esporta usando il sistema esistente
                 success = self._export_single_batch(batch, json_data, job.output_folder)
                 
                 if success:
@@ -308,27 +304,15 @@ class JobManagerDialog:
                     batch.status = 'exported'
                     self.job_manager.update_batch(batch)
                     exported_count += 1
-                    print(f"[EXPORT] ✅ Batch {batch.name} esportato con successo")
                 else:
                     error_count += 1
-                    error_msg = f"Batch '{batch.name}' - Export fallito"
-                    error_messages.append(error_msg)
-                    print(f"[EXPORT] ❌ {error_msg}")
                     
             except Exception as e:
+                print(f"Error exporting batch {batch.name}: {e}")
                 error_count += 1
-                error_msg = f"Batch '{batch.name}' - {str(e)}"
-                error_messages.append(error_msg)
-                print(f"[EXPORT] ❌ Error exporting batch {batch.name}: {e}")
-                import traceback
-                traceback.print_exc()
         
         # Aggiorna progresso Job
         self.job_manager.update_job_progress(job.id)
-        
-        # ✅ MOSTRA DI NUOVO JOB MANAGER
-        self.dialog.deiconify()
-        self.dialog.lift()
         
         # Ricarica lista
         self.load_jobs()
@@ -341,76 +325,34 @@ class JobManagerDialog:
                 f"Destinazione: {job.output_folder}"
             )
         else:
-            error_details = "\n".join(error_messages[:5])  # Mostra primi 5 errori
-            if len(error_messages) > 5:
-                error_details += f"\n... e altri {len(error_messages) - 5} errori"
-            
             messagebox.showwarning(
                 "Export Parziale",
                 f"✅ Esportati: {exported_count}\n"
                 f"❌ Errori: {error_count}\n\n"
-                f"Destinazione: {job.output_folder}\n\n"
-                f"Errori:\n{error_details}"
+                f"Destinazione: {job.output_folder}"
             )
 
     def _export_single_batch(self, batch, json_data, output_folder):
-        """Esporta singolo batch usando il metodo dell'app principale"""
+        """Esporta singolo batch usando il sistema di export esistente"""
         try:
-            print(f"[EXPORT] Caricamento batch {batch.name} nell'app...")
+            # Usa l'export manager dell'app
+            from export.document_exporter import DocumentExporter
             
-            # 1. Prepara dati batch
-            doc_dict = {
-                'doc_path': batch.pdf_path,
-                'json_path': batch.json_path,
-                'json_data': json_data
-            }
+            exporter = DocumentExporter(
+                pdf_path=batch.pdf_path,
+                json_data=json_data,
+                output_folder=output_folder
+            )
             
-            # 2. Salva output folder corrente
-            old_output = self.app.config_manager.get('default_output_folder', '')
-            print(f"[EXPORT] Old output folder: {old_output}")
-            print(f"[EXPORT] New output folder: {output_folder}")
+            # Esporta
+            result = exporter.export()
             
-            # 3. Imposta temporaneamente output folder del Job
-            self.app.config_manager.set('default_output_folder', output_folder)
-            
-            # 4. Carica documento nell'app (questo popola self.app.documentgroups)
-            print(f"[EXPORT] Loading document from batch...")
-            success = self.app.load_document_from_batch(doc_dict)
-            
-            if not success:
-                print(f"[EXPORT] ❌ Failed to load document")
-                # Ripristina output folder
-                self.app.config_manager.set('default_output_folder', old_output)
-                return False
-            
-            print(f"[EXPORT] ✅ Document loaded successfully")
-            print(f"[EXPORT] Document groups: {len(self.app.documentgroups)}")
-            
-            # 5. Esporta usando il metodo esistente dell'app
-            print(f"[EXPORT] Calling complete_sequence_export()...")
-            self.app.complete_sequence_export()
-            
-            print(f"[EXPORT] ✅ Export completed for {batch.name}")
-            
-            # 6. Ripristina output folder originale
-            self.app.config_manager.set('default_output_folder', old_output)
-            
-            # 7. Pulisci workspace app
-            self.app.reset_workspace()
-            
-            return True
+            return result
             
         except Exception as e:
-            print(f"[EXPORT] ❌ Error in _export_single_batch: {e}")
+            print(f"Error in _export_single_batch: {e}")
             import traceback
             traceback.print_exc()
-            
-            # Ripristina output folder in caso di errore
-            try:
-                self.app.config_manager.set('default_output_folder', old_output)
-            except:
-                pass
-            
             return False
     
     def delete_job(self):
