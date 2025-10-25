@@ -1,7 +1,7 @@
 ====================================================== 
 PULIZIA COMPLETA CACHE PYTHON 
 ====================================================== 
-Operazione avviata: 19/10/2025 -  0:12:05,49 
+Operazione avviata: 24/10/2025 -  0:14:41,95 
 Directory: C:\Users\test\Desktop\PythonMDB\DynamicAI 
  
  
@@ -15,8 +15,9 @@ Directory: C:\Users\test\Desktop\PythonMDB\DynamicAI
   Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\components\__pycache__ 
   Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\gui\dialogs\__pycache__ 
   Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\loaders\__pycache__ 
+  Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\models\__pycache__ 
   Eliminazione: C:\Users\test\Desktop\PythonMDB\DynamicAI\utils\__pycache__ 
-  Totale cartelle rimosse: 9 
+  Totale cartelle rimosse: 10 
  
 [FASE 2] FILE .pyc (Bytecode Compilato) 
 ---------------------------------------- 
@@ -35,11 +36,11 @@ ATTENZIONE: File .pyd potrebbero essere necessari
 ====================================================== 
 RIEPILOGO OPERAZIONE 
 ====================================================== 
-Cartelle __pycache__ rimosse: 9 
+Cartelle __pycache__ rimosse: 10 
 File .pyc rimossi: 0 
 File .pyo rimossi: 0 
 File .pyd rimossi: 0 
-TOTALE ELEMENTI RIMOSSI: 9 
+TOTALE ELEMENTI RIMOSSI: 10 
  
-Operazione completata: 19/10/2025 -  0:12:07,56 
+Operazione completata: 24/10/2025 -  0:14:44,08 
 ====================================================== 

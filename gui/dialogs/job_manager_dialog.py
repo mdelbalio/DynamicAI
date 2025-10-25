@@ -238,6 +238,9 @@ class JobManagerDialog:
     
     def export_job(self):
         """Esporta TUTTI i batch del Job selezionato"""
+        print(f"[BUTTON_DEBUG] 🔘 Export button clicked!")
+        
+        # Verifica selezione
         selected = self.tree.selection()
         if not selected:
             messagebox.showwarning("Attenzione", "Seleziona un Job da esportare")
@@ -286,132 +289,328 @@ class JobManagerDialog:
         exported_count = 0
         error_count = 0
         error_messages = []
+        export_files = []  # 🔥 FIX: Lista per tenere traccia dei file esportati
         
         # ✅ NASCONDI JOB MANAGER durante export
         self.dialog.withdraw()
         
-        # Export ogni batch
-        for i, batch in enumerate(batches, 1):
-            try:
-                print(f"\n[EXPORT] Processing batch {i}/{len(batches)}: {batch.name}")
-                
-                # Carica JSON
-                with open(batch.json_path, 'r', encoding='utf-8') as f:
-                    json_data = json.load(f)
-                
-                # ✅ ESPORTA usando il sistema dell'app
-                success = self._export_single_batch(batch, json_data, job.output_folder)
-                
-                if success:
-                    # Marca come esportato
-                    batch.exported = True
-                    batch.status = 'exported'
-                    self.job_manager.update_batch(batch)
-                    exported_count += 1
-                    print(f"[EXPORT] ✅ Batch {batch.name} esportato con successo")
-                else:
-                    error_count += 1
-                    error_msg = f"Batch '{batch.name}' - Export fallito"
-                    error_messages.append(error_msg)
-                    print(f"[EXPORT] ❌ {error_msg}")
+        try:
+            # Export ogni batch
+            for i, batch in enumerate(batches, 1):
+                try:
+                    print(f"\n[EXPORT] Processing batch {i}/{len(batches)}: {batch.name}")
                     
+                    # Carica JSON
+                    if not os.path.exists(batch.json_path):
+                        error_msg = f"Batch '{batch.name}' - JSON file not found: {batch.json_path}"
+                        error_messages.append(error_msg)
+                        error_count += 1
+                        print(f"[EXPORT] ❌ {error_msg}")
+                        continue
+                    
+                    with open(batch.json_path, 'r', encoding='utf-8') as f:
+                        json_data = json.load(f)
+                    
+                    # ✅ ESPORTA usando il sistema dell'app
+                    success = self._export_single_batch(batch, json_data, job.output_folder)
+                    
+                    if success:
+                        # Marca come esportato
+                        batch.exported = True
+                        batch.status = 'exported'
+                        self.job_manager.update_batch(batch)
+                        exported_count += 1
+                        export_files.append(batch.name)  # 🔥 FIX: Traccia file esportato
+                        print(f"[EXPORT] ✅ Batch {batch.name} esportato con successo")
+                    else:
+                        error_count += 1
+                        error_msg = f"Batch '{batch.name}' - Export fallito"
+                        error_messages.append(error_msg)
+                        print(f"[EXPORT] ❌ {error_msg}")
+                        
+                except Exception as e:
+                    error_count += 1
+                    error_msg = f"Batch '{batch.name}' - Errore: {str(e)}"
+                    error_messages.append(error_msg)
+                    print(f"[EXPORT] ❌ Error exporting batch {batch.name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Aggiorna progresso Job
+            try:
+                self.job_manager.update_job_progress(job.id)
             except Exception as e:
-                error_count += 1
-                error_msg = f"Batch '{batch.name}' - {str(e)}"
-                error_messages.append(error_msg)
-                print(f"[EXPORT] ❌ Error exporting batch {batch.name}: {e}")
-                import traceback
-                traceback.print_exc()
+                print(f"[EXPORT] Warning: Could not update job progress: {e}")
         
-        # Aggiorna progresso Job
-        self.job_manager.update_job_progress(job.id)
+        except Exception as e:
+            print(f"[EXPORT] ❌ Critical error during export: {e}")
+            import traceback
+            traceback.print_exc()
+            messagebox.showerror("Errore Critico", f"Errore durante l'export:\n{e}")
         
-        # ✅ MOSTRA DI NUOVO JOB MANAGER
-        self.dialog.deiconify()
-        self.dialog.lift()
-        
-        # Ricarica lista
-        self.load_jobs()
+        finally:
+            # ✅ MOSTRA DI NUOVO JOB MANAGER
+            self.dialog.deiconify()
+            self.dialog.lift()
+            
+            # Ricarica lista
+            try:
+                self.load_jobs()
+            except Exception as e:
+                print(f"[EXPORT] Warning: Could not reload jobs: {e}")
         
         # Messaggio risultato
         if error_count == 0:
             messagebox.showinfo(
                 "Export Completato",
                 f"✅ Esportati con successo {exported_count} batch!\n\n"
-                f"Destinazione: {job.output_folder}"
+                f"📁 Destinazione: {job.output_folder}\n"
+                f"📄 File processati: {len(export_files)}\n\n"
+                f"Tutti i documenti sono stati esportati correttamente."
             )
-        else:
+        elif exported_count > 0:
+            # Export parziale
             error_details = "\n".join(error_messages[:5])  # Mostra primi 5 errori
             if len(error_messages) > 5:
                 error_details += f"\n... e altri {len(error_messages) - 5} errori"
             
             messagebox.showwarning(
-                "Export Parziale",
-                f"✅ Esportati: {exported_count}\n"
-                f"❌ Errori: {error_count}\n\n"
-                f"Destinazione: {job.output_folder}\n\n"
+                "Export Parziale", 
+                f"✅ Esportati con successo: {exported_count}\n"
+                f"❌ Errori riscontrati: {error_count}\n\n"
+                f"📁 Destinazione: {job.output_folder}\n"
+                f"📄 File processati: {len(export_files)}\n\n"
                 f"Errori:\n{error_details}"
             )
+        else:
+            # Tutti falliti
+            error_details = "\n".join(error_messages[:5])  # Mostra primi 5 errori
+            if len(error_messages) > 5:
+                error_details += f"\n... e altri {len(error_messages) - 5} errori"
+            
+            messagebox.showerror(
+                "Export Fallito",
+                f"❌ Nessun batch è stato esportato!\n\n"
+                f"📁 Destinazione: {job.output_folder}\n"
+                f"🚫 Errori: {error_count}\n\n"
+                f"Dettagli errori:\n{error_details}"
+            )
 
-    def _export_single_batch(self, batch, json_data, output_folder):
-        """Esporta singolo batch usando il metodo dell'app principale"""
+    def _export_single_batch(self, batch, json_data, output_folder, job=None):
+        """Esporta singolo batch usando ExportManager - VERSIONE FINALE + CSV + STRUTTURA"""
+        from datetime import datetime
+        
+        print("="*50)
+        print(f"[EXPORT_DEBUG] 🚀 STARTING EXPORT DEBUG")
+        print(f"[EXPORT_DEBUG] Batch name: {batch.name}")
+        print(f"[EXPORT_DEBUG] Batch PDF: {batch.pdf_path}")
+        print(f"[EXPORT_DEBUG] Output folder: {output_folder}")
+        print(f"[EXPORT_DEBUG] JSON data keys: {list(json_data.keys())}")
+        print(f"[EXPORT_DEBUG] Categories count: {len(json_data.get('categories', []))}")
+        
+        # 🔥 GESTIONE STRUTTURA DIRECTORY
+        final_output_folder = output_folder
+        if job and hasattr(job, 'maintain_structure') and job.maintain_structure:
+            # Estrae il nome della sottocartella dall'input
+            # Es: C:/FLUIDO-IN/Insegne_multi-B001/B001_F001.pdf → Insegne_multi-B001
+            input_parent = os.path.dirname(batch.pdf_path)
+            folder_name = os.path.basename(input_parent)
+            final_output_folder = os.path.join(output_folder, folder_name)
+            print(f"[EXPORT_DEBUG] 📁 Directory structure maintained: {final_output_folder}")
+        else:
+            print(f"[EXPORT_DEBUG] 📁 Flat output structure: {final_output_folder}")
+        
         try:
-            print(f"[EXPORT] Caricamento batch {batch.name} nell'app...")
+            # 1. Import ExportManager
+            print(f"[EXPORT_DEBUG] 📦 Testing ExportManager import...")
+            from export.export_manager import ExportManager
+            print(f"[EXPORT_DEBUG] ✅ ExportManager imported successfully")
             
-            # 1. Prepara dati batch
-            doc_dict = {
-                'doc_path': batch.pdf_path,
-                'json_path': batch.json_path,
-                'json_data': json_data
-            }
+            # 2. Creazione ExportManager
+            print(f"[EXPORT_DEBUG] 🏗️ Creating ExportManager instance...")
+            export_manager = ExportManager(self.config_manager)
+            print(f"[EXPORT_DEBUG] ✅ ExportManager created successfully")
             
-            # 2. Salva output folder corrente
-            old_output = self.app.config_manager.get('default_output_folder', '')
-            print(f"[EXPORT] Old output folder: {old_output}")
-            print(f"[EXPORT] New output folder: {output_folder}")
+            # 3. Path verification
+            print(f"[EXPORT_DEBUG] 📁 Verifying paths...")
+            if not os.path.exists(batch.pdf_path):
+                print(f"[EXPORT_DEBUG] ❌ PDF file not found: {batch.pdf_path}")
+                return False
+            else:
+                print(f"[EXPORT_DEBUG] ✅ PDF file exists")
             
-            # 3. Imposta temporaneamente output folder del Job
-            self.app.config_manager.set('default_output_folder', output_folder)
+            if not os.path.exists(final_output_folder):
+                print(f"[EXPORT_DEBUG] 📁 Creating output folder: {final_output_folder}")
+                os.makedirs(final_output_folder, exist_ok=True)
             
-            # 4. Carica documento nell'app (questo popola self.app.documentgroups)
-            print(f"[EXPORT] Loading document from batch...")
-            success = self.app.load_document_from_batch(doc_dict)
+            # 4. CREA DOCUMENT GROUPS per ExportManager
+            print(f"[EXPORT_DEBUG] 📄 Converting batch to document_groups...")
             
-            if not success:
-                print(f"[EXPORT] ❌ Failed to load document")
-                # Ripristina output folder
-                self.app.config_manager.set('default_output_folder', old_output)
+            # Carica il documento per creare gli thumbnails
+            from loaders import create_document_loader
+            doc_loader = create_document_loader(batch.pdf_path)
+            
+            # FIX: Carica il documento
+            doc_loader.load()
+            print(f"[EXPORT_DEBUG] Document loaded with {doc_loader.totalpages} pages")
+            
+            # Crea mock DocumentGroup objects per ExportManager
+            document_groups = []
+            
+            # Per ogni categoria nel JSON, crea un gruppo
+            categories_data = json_data.get('categories', [])
+            print(f"[EXPORT_DEBUG] Processing {len(categories_data)} categories...")
+            
+            for cat_info in categories_data:
+                categoria = cat_info['categoria']
+                inizio = cat_info['inizio']
+                fine = cat_info['fine']
+                
+                print(f"[EXPORT_DEBUG] Category '{categoria}': pages {inizio}-{fine}")
+                
+                # Crea mock group object
+                class MockGroup:
+                    def __init__(self, category_name, pages):
+                        self.categoryname = category_name      # 🔥 Per ExportManager
+                        self.category_name = category_name     # Mantiene quello vecchio
+                        self.thumbnails = []
+                        
+                        # Crea mock thumbnails per ogni pagina
+                        for page_num in pages:
+                            try:
+                                # FIX: Usa get_page() con 1-based indexing!
+                                page_image = doc_loader.get_page(page_num)  # 1-based
+                                
+                                if page_image:  # Verifica che l'immagine sia valida
+                                    class MockThumbnail:
+                                        def __init__(self, image):
+                                            self.image = image
+                                    
+                                    self.thumbnails.append(MockThumbnail(page_image))
+                                    print(f"[EXPORT_DEBUG] ✅ Loaded page {page_num} successfully")
+                                else:
+                                    print(f"[EXPORT_DEBUG] ⚠️ Page {page_num} returned None")
+                                    
+                            except Exception as e:
+                                print(f"[EXPORT_DEBUG] Warning: Could not load page {page_num}: {e}")
+                
+                # Crea lista pagine per questa categoria
+                pages = list(range(inizio, fine + 1))
+                group = MockGroup(categoria, pages)
+                
+                if group.thumbnails:  # Solo se ha thumbnails validi
+                    document_groups.append(group)
+                    print(f"[EXPORT_DEBUG] ✅ Added group '{categoria}' with {len(group.thumbnails)} pages")
+                else:
+                    print(f"[EXPORT_DEBUG] ⚠️ Skipped group '{categoria}' - no valid thumbnails")
+
+            print(f"[EXPORT_DEBUG] ✅ Created {len(document_groups)} document groups")
+            
+            # AGGIUNTA: Verifica che abbiamo almeno un gruppo
+            if len(document_groups) == 0:
+                print(f"[EXPORT_DEBUG] ❌ No document groups created - cannot export")
                 return False
             
-            print(f"[EXPORT] ✅ Document loaded successfully")
-            print(f"[EXPORT] Document groups: {len(self.app.documentgroups)}")
+            # 5. CHIAMATA EXPORT CORRETTA con tutti i parametri
+            document_name = os.path.splitext(os.path.basename(batch.pdf_path))[0]
+            print(f"[EXPORT_DEBUG] 🚀 CALLING export_manager.export_documents()...")
+            print(f"[EXPORT_DEBUG] Args:")
+            print(f"[EXPORT_DEBUG]   output_folder: {final_output_folder}")
+            print(f"[EXPORT_DEBUG]   document_groups: {len(document_groups)} groups")
+            print(f"[EXPORT_DEBUG]   document_name: {document_name}")
             
-            # 5. Esporta usando il metodo esistente dell'app
-            print(f"[EXPORT] Calling complete_sequence_export()...")
-            self.app.complete_sequence_export()
+            # Salva configurazione output temporanea
+            old_output = self.config_manager.get('default_output_folder', '')
+            self.config_manager.set('default_output_folder', final_output_folder)
             
-            print(f"[EXPORT] ✅ Export completed for {batch.name}")
+            # CHIAMATA CORRETTA: export_documents(output_folder, document_groups, document_name, callback)
+            exported_files = export_manager.export_documents(
+                final_output_folder, 
+                document_groups, 
+                document_name, 
+                None  # progress_callback
+            )
             
-            # 6. Ripristina output folder originale
-            self.app.config_manager.set('default_output_folder', old_output)
+            # Ripristina configurazione
+            self.config_manager.set('default_output_folder', old_output)
             
-            # 7. Pulisci workspace app
-            self.app.reset_workspace()
+            print(f"[EXPORT_DEBUG] 📤 Export completed!")
+            print(f"[EXPORT_DEBUG] Returned: {exported_files}")
+            print(f"[EXPORT_DEBUG] Type: {type(exported_files)}")
             
-            return True
-            
+            # 6. Verifica risultato
+            if exported_files and len(exported_files) > 0:
+                print(f"[EXPORT_DEBUG] ✅ SUCCESS! {len(exported_files)} files exported")
+                
+                # 7. 🔥 GENERA CSV CON METADATI
+                print(f"[EXPORT_DEBUG] 📊 Generating CSV metadata...")
+                try:
+                    # Crea metadata rows dalle categorie JSON
+                    metadata_rows = []
+                    
+                    categories_data = json_data.get('categories', [])
+                    for i, cat_info in enumerate(categories_data, 1):
+                        categoria = cat_info['categoria']
+                        inizio = cat_info['inizio']
+                        fine = cat_info['fine']
+                        
+                        metadata_row = {
+                            'Documento': document_name,
+                            'Categoria': categoria,
+                            'Pagina_Inizio': inizio,
+                            'Pagina_Fine': fine,
+                            'Totale_Pagine': (fine - inizio + 1),
+                            'Posizione': i,
+                            'Data_Export': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                            'Path_Input': batch.pdf_path,
+                            'Path_Output': final_output_folder
+                        }
+                        metadata_rows.append(metadata_row)
+                    
+                    if metadata_rows:
+                        # Chiama export CSV
+                        csv_file = export_manager.export_metadata_csv(
+                            metadata_rows=metadata_rows,
+                            input_filename=document_name,
+                            output_folder=final_output_folder
+                        )
+                        
+                        if csv_file:
+                            print(f"[EXPORT_DEBUG] ✅ CSV generated: {csv_file}")
+                        else:
+                            print(f"[EXPORT_DEBUG] ⚠️ CSV generation failed")
+                    else:
+                        print(f"[EXPORT_DEBUG] ⚠️ No metadata rows to export")
+                        
+                except Exception as csv_error:
+                    print(f"[EXPORT_DEBUG] ❌ CSV Error: {csv_error}")
+                    # Non fallire l'export per errori CSV
+                
+                return True
+            else:
+                print(f"[EXPORT_DEBUG] ❌ FAILURE: No files exported")
+                return False
+                
         except Exception as e:
-            print(f"[EXPORT] ❌ Error in _export_single_batch: {e}")
+            print(f"[EXPORT_DEBUG] 💥 EXCEPTION in _export_single_batch:")
+            print(f"[EXPORT_DEBUG] Error: {e}")
+            print(f"[EXPORT_DEBUG] Type: {type(e)}")
+            
             import traceback
+            print(f"[EXPORT_DEBUG] 📋 Full traceback:")
             traceback.print_exc()
             
-            # Ripristina output folder in caso di errore
+            # Ripristina config
             try:
-                self.app.config_manager.set('default_output_folder', old_output)
+                self.config_manager.set('default_output_folder', old_output)
             except:
                 pass
             
             return False
+        
+        finally:
+            print(f"[EXPORT_DEBUG] 🏁 Export debug completed")
+            print("="*50)
     
     def delete_job(self):
         """Elimina Job"""

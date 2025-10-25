@@ -17,7 +17,7 @@ class JobManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             
-            # Crea tabella jobs
+            # 🔥 Crea tabella jobs con maintain_structure
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS jobs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,9 +31,18 @@ class JobManager:
                     completed_images INTEGER DEFAULT 0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    maintain_structure INTEGER DEFAULT 1,
                     metadata TEXT
                 )
             """)
+            
+            # 🔥 Aggiungi colonna maintain_structure se non esiste (per database esistenti)
+            try:
+                cursor.execute('ALTER TABLE jobs ADD COLUMN maintain_structure INTEGER DEFAULT 1')
+                print("[DB] Added maintain_structure column to jobs table")
+            except sqlite3.OperationalError:
+                # Colonna già esistente
+                pass
             
             # Crea tabella batches
             cursor.execute("""
@@ -64,13 +73,18 @@ class JobManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             data = job.to_dict()
+            
+            # 🔥 AGGIUNTO maintain_structure nell'INSERT
             cursor.execute("""
-                INSERT INTO jobs (name, description, input_folder, output_folder, 
-                                 status, progress, total_images, completed_images, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (data['name'], data['description'], data['input_folder'], 
-                 data['output_folder'], data['status'], data['progress'],
-                 data['total_images'], data['completed_images'], data['metadata']))
+                INSERT INTO jobs (name, description, input_folder, output_folder,
+                                status, progress, total_images, completed_images, 
+                                maintain_structure, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (data['name'], data['description'], data['input_folder'],
+                  data['output_folder'], data['status'], data['progress'],
+                  data['total_images'], data['completed_images'], 
+                  data['maintain_structure'], data['metadata']))
+            
             conn.commit()
             return cursor.lastrowid
     
@@ -82,20 +96,32 @@ class JobManager:
             cursor.execute("SELECT * FROM jobs ORDER BY created_at DESC")
             return [Job.from_dict(dict(row)) for row in cursor.fetchall()]
     
+    def get_job_by_id(self, job_id: int) -> Optional[Job]:
+        """Ottieni Job per ID"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM jobs WHERE id=?", (job_id,))
+            row = cursor.fetchone()
+            return Job.from_dict(dict(row)) if row else None
+    
     def update_job(self, job: Job):
         """Aggiorna Job"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             data = job.to_dict()
+            
+            # 🔥 AGGIUNTO maintain_structure nell'UPDATE
             cursor.execute("""
                 UPDATE jobs SET name=?, description=?, input_folder=?, output_folder=?,
                               status=?, progress=?, total_images=?, completed_images=?,
-                              metadata=?, updated_at=CURRENT_TIMESTAMP
+                              maintain_structure=?, metadata=?, updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
             """, (data['name'], data['description'], data['input_folder'],
-                 data['output_folder'], data['status'], data['progress'],
-                 data['total_images'], data['completed_images'], data['metadata'],
-                 job.id))
+                  data['output_folder'], data['status'], data['progress'],
+                  data['total_images'], data['completed_images'], 
+                  data['maintain_structure'], data['metadata'], job.id))
+            
             conn.commit()
     
     def delete_job(self, job_id: int):
@@ -108,7 +134,6 @@ class JobManager:
     def scan_folder_for_batches(self, job: Job) -> List[dict]:
         """Scansiona cartella input per trovare coppie PDF+JSON"""
         batches = []
-        
         if not os.path.exists(job.input_folder):
             return batches
         
@@ -132,13 +157,15 @@ class JobManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             data = batch.to_dict()
+            
             cursor.execute("""
-                INSERT INTO batches (job_id, name, pdf_path, json_path, 
+                INSERT INTO batches (job_id, name, pdf_path, json_path,
                                    status, page_count, validated, exported, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (data['job_id'], data['name'], data['pdf_path'], data['json_path'],
-                 data['status'], data['page_count'], data['validated'], 
-                 data['exported'], data['metadata']))
+                  data['status'], data['page_count'], data['validated'],
+                  data['exported'], data['metadata']))
+            
             conn.commit()
             return cursor.lastrowid
     
@@ -159,19 +186,20 @@ class JobManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             data = batch.to_dict()
+            
             cursor.execute("""
                 UPDATE batches SET name=?, pdf_path=?, json_path=?, status=?,
                                  page_count=?, validated=?, exported=?, metadata=?
                 WHERE id=?
             """, (data['name'], data['pdf_path'], data['json_path'], data['status'],
-                 data['page_count'], data['validated'], data['exported'], 
-                 data['metadata'], batch.id))
+                  data['page_count'], data['validated'], data['exported'],
+                  data['metadata'], batch.id))
+            
             conn.commit()
     
     def update_job_progress(self, job_id: int):
         """Ricalcola progresso Job basato sui Batch"""
         batches = self.get_job_batches(job_id)
-        
         if not batches:
             return
         
@@ -194,6 +222,7 @@ class JobManager:
                               updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
             """, (progress, status, completed, job_id))
+            
             conn.commit()
     
     def create_batches_from_folder(self, job: Job) -> int:
@@ -217,6 +246,7 @@ class JobManager:
                             page_count += (end - start + 1)
                     
                     metadata = json_data.get('header', {})
+                    
             except Exception as e:
                 print(f"Error reading JSON {data['json_path']}: {e}")
             
@@ -233,6 +263,7 @@ class JobManager:
             created += 1
             total_pages += page_count
         
+        # Aggiorna totale pagine del Job
         if created > 0:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -242,3 +273,39 @@ class JobManager:
                 conn.commit()
         
         return created
+    
+    # 🔥 NUOVI METODI UTILI
+    
+    def get_job_stats(self, job_id: int) -> dict:
+        """Ottieni statistiche complete del Job"""
+        job = self.get_job_by_id(job_id)
+        if not job:
+            return {}
+        
+        batches = self.get_job_batches(job_id)
+        
+        return {
+            'job': job,
+            'total_batches': len(batches),
+            'validated_batches': sum(1 for b in batches if b.validated),
+            'exported_batches': sum(1 for b in batches if b.exported),
+            'total_pages': sum(b.page_count for b in batches),
+            'progress_percent': job.progress
+        }
+    
+    def search_jobs(self, query: str = "") -> List[Job]:
+        """Cerca Job per nome o descrizione"""
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            if query:
+                cursor.execute("""
+                    SELECT * FROM jobs 
+                    WHERE name LIKE ? OR description LIKE ?
+                    ORDER BY created_at DESC
+                """, (f'%{query}%', f'%{query}%'))
+            else:
+                cursor.execute("SELECT * FROM jobs ORDER BY created_at DESC")
+            
+            return [Job.from_dict(dict(row)) for row in cursor.fetchall()]
